@@ -115,12 +115,17 @@ function parseCSVLine(line: string): string[] {
 }
 
 // Parse transaction from CSV parts - handles common French bank formats
-function parseTransaction(parts: string[], _bankName: string): { 
+function parseTransaction(parts: string[], bankName: string): { 
   date: Date
   amount: number
   description: string
   reference?: string 
 } | null {
+  // Blank.app specific format
+  if (bankName === 'blank') {
+    return parseBlankTransaction(parts)
+  }
+  
   // Try different date formats
   const datePatterns = [
     /^(\d{2})\/(\d{2})\/(\d{4})$/, // DD/MM/YYYY
@@ -189,5 +194,106 @@ function parseTransaction(parts: string[], _bankName: string): {
     amount: amount!,
     description: description || 'Transaction sans description',
     reference: reference || undefined,
+  }
+}
+
+// Parse Blank.app CSV format
+// Expected format: Date;Description;Amount;Balance (or similar)
+function parseBlankTransaction(parts: string[]): {
+  date: Date
+  amount: number
+  description: string
+  reference?: string
+} | null {
+  // Blank.app typically uses semicolon separator
+  // Format variations:
+  // 1. Date;Description;Amount;Balance
+  // 2. Date;Description;Debit;Credit;Balance
+  // 3. Date;Label;Amount
+  
+  if (parts.length < 3) return null
+  
+  // Try to parse date from first column
+  let dateIndex = -1
+  let amountIndex = -1
+  let descriptionIndex = -1
+  
+  // Date patterns
+  const datePatterns = [
+    /^(\d{2})\/(\d{2})\/(\d{4})$/, // DD/MM/YYYY
+    /^(\d{4})-(\d{2})-(\d{2})$/, // YYYY-MM-DD
+    /^(\d{2})-(\d{2})-(\d{4})$/, // DD-MM-YYYY
+  ]
+  
+  for (let i = 0; i < Math.min(parts.length, 5); i++) {
+    const part = parts[i].trim()
+    
+    // Check for date
+    for (const pattern of datePatterns) {
+      if (pattern.test(part)) {
+        dateIndex = i
+        break
+      }
+    }
+    
+    // Check for amount (French or English format)
+    const cleanPart = part.replace(/\s/g, '').replace(',', '.')
+    if (/^-?\d+\.?\d*$/.test(cleanPart) && amountIndex === -1 && i !== dateIndex) {
+      const num = parseFloat(cleanPart)
+      if (!isNaN(num) && num !== 0) {
+        amountIndex = i
+      }
+    }
+  }
+  
+  if (dateIndex === -1 || amountIndex === -1) {
+    return null
+  }
+  
+  // Find description (usually between date and amount)
+  for (let i = 0; i < parts.length; i++) {
+    if (i !== dateIndex && i !== amountIndex) {
+      const part = parts[i].trim()
+      if (part && !/^-?\d/.test(part.replace(/\s/g, ''))) {
+        descriptionIndex = i
+        break
+      }
+    }
+  }
+  
+  // Parse date
+  const dateStr = parts[dateIndex].trim()
+  let date: Date | null = null
+  
+  for (const pattern of datePatterns) {
+    const match = dateStr.match(pattern)
+    if (match) {
+      if (pattern === datePatterns[0] || pattern === datePatterns[2]) {
+        // DD/MM/YYYY or DD-MM-YYYY
+        date = new Date(parseInt(match[3]), parseInt(match[2]) - 1, parseInt(match[1]))
+      } else {
+        // YYYY-MM-DD
+        date = new Date(parseInt(match[1]), parseInt(match[2]) - 1, parseInt(match[3]))
+      }
+      break
+    }
+  }
+  
+  if (!date) return null
+  
+  // Parse amount
+  const amountStr = parts[amountIndex].replace(/\s/g, '').replace(',', '.')
+  const amount = parseFloat(amountStr)
+  if (isNaN(amount)) return null
+  
+  // Get description
+  const description = descriptionIndex >= 0 
+    ? parts[descriptionIndex].trim() 
+    : 'Transaction Blank'
+  
+  return {
+    date,
+    amount,
+    description: description || 'Transaction Blank',
   }
 }

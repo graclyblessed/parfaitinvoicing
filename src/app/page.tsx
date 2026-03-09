@@ -102,6 +102,7 @@ export default function TaxDashboard() {
   })
   const [invoiceTvaRate, setInvoiceTvaRate] = useState(20)
   const [exporting, setExporting] = useState(false)
+  const [selectedBank, setSelectedBank] = useState('blank') // Blank.app bank
 
   // Fetch initial data
   useEffect(() => {
@@ -162,7 +163,7 @@ export default function TaxDashboard() {
     setUploading(true)
     const formData = new FormData()
     formData.append('file', selectedFile)
-    formData.append('bankName', 'default')
+    formData.append('bankName', selectedBank)
     
     try {
       const res = await fetch('/api/transactions/upload', {
@@ -616,7 +617,25 @@ export default function TaxDashboard() {
               <CardTitle>Importer des transactions</CardTitle>
               <CardDescription>Téléchargez un fichier CSV de votre banque</CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="space-y-4">
+              <div className="flex items-center gap-4">
+                <div className="flex-1">
+                  <Label className="text-sm text-muted-foreground mb-1 block">Votre banque</Label>
+                  <select 
+                    className="w-full p-2 border rounded-md"
+                    value={selectedBank}
+                    onChange={(e) => setSelectedBank(e.target.value)}
+                  >
+                    <option value="blank">Blank.app</option>
+                    <option value="bnpparibas">BNP Paribas</option>
+                    <option value="creditagricole">Crédit Agricole</option>
+                    <option value="lcl">LCL</option>
+                    <option value="societegenerale">Société Générale</option>
+                    <option value="revolut">Revolut</option>
+                    <option value="default">Autre (format automatique)</option>
+                  </select>
+                </div>
+              </div>
               <div className="flex items-center gap-4">
                 <Input
                   type="file"

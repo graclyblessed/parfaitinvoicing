@@ -1,21 +1,23 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { useState, useEffect } from 'react'
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Progress } from '@/components/ui/progress'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Textarea } from '@/components/ui/textarea'
+import { Progress } from '@/components/ui/progress'
+import { Separator } from '@/components/ui/separator'
 import { 
   AlertCircle, Calendar, Upload, FileText, Settings, TrendingUp, 
-  TrendingDown, Euro, Clock, CheckCircle, XCircle, Plus, Download,
-  Bell, Building2, ChevronRight, Loader2
+  TrendingDown, Euro, Clock, CheckCircle, Plus, Download,
+  Bell, Building2, Loader2, Receipt, PiggyBank, CreditCard,
+  ArrowUpRight, ArrowDownRight, Minus
 } from 'lucide-react'
 
 // Types
@@ -62,7 +64,7 @@ interface Settings {
 
 // Main component
 export default function TaxDashboard() {
-  const [activeTab, setActiveTab] = useState('dashboard')
+  const [activeTab, setActiveTab] = useState('overview')
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [categories, setCategories] = useState<Category[]>([])
   const [deadlines, setDeadlines] = useState<Deadline[]>([])
@@ -73,6 +75,16 @@ export default function TaxDashboard() {
 
   // Fetch initial data
   useEffect(() => {
+    // Check URL params for tab
+    const params = new URLSearchParams(window.location.search)
+    const tab = params.get('tab')
+    if (tab) {
+      if (tab === 'transactions') setActiveTab('transactions')
+      else if (tab === 'calendar') setActiveTab('deadlines')
+      else if (tab === 'invoices') setActiveTab('invoices')
+      else if (tab === 'settings') setActiveTab('settings')
+    }
+    
     fetchAllData()
   }, [])
 
@@ -105,14 +117,8 @@ export default function TaxDashboard() {
   }
 
   // Calculate totals
-  const totalIncome = transactions
-    .filter(t => t.amount > 0)
-    .reduce((sum, t) => sum + t.amount, 0)
-  
-  const totalExpenses = Math.abs(transactions
-    .filter(t => t.amount < 0)
-    .reduce((sum, t) => sum + t.amount, 0))
-  
+  const totalIncome = transactions.filter(t => t.amount > 0).reduce((sum, t) => sum + t.amount, 0)
+  const totalExpenses = Math.abs(transactions.filter(t => t.amount < 0).reduce((sum, t) => sum + t.amount, 0))
   const netProfit = totalIncome - totalExpenses
   const unlabeledCount = transactions.filter(t => !t.labeled).length
 
@@ -177,17 +183,10 @@ export default function TaxDashboard() {
         }),
       })
       fetchAllData()
+      alert('Paramètres enregistrés!')
     } catch (error) {
       console.error('Error updating settings:', error)
     }
-  }
-
-  // Get urgency color
-  const getUrgencyColor = (daysUntil: number) => {
-    if (daysUntil < 0) return 'bg-red-500'
-    if (daysUntil <= 7) return 'bg-red-500'
-    if (daysUntil <= 30) return 'bg-yellow-500'
-    return 'bg-green-500'
   }
 
   // Get days until deadline
@@ -216,533 +215,570 @@ export default function TaxDashboard() {
     }).format(amount)
   }
 
+  // Calculate IS
+  const calculateIS = (profit: number) => {
+    if (profit <= 0) return 0
+    if (profit <= 42500) return profit * 0.15
+    return (42500 * 0.15) + ((profit - 42500) * 0.25)
+  }
+
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+      <div className="flex items-center justify-center min-h-[400px]">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 p-4 md:p-8">
-      <div className="max-w-7xl mx-auto">
-        {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">
-            {settings?.companyName || 'Mon Gestionnaire Fiscal'}
-          </h1>
-          <p className="text-gray-600 mt-1">
-            Gérez votre SASU simplement
-          </p>
-        </div>
+    <div className="p-6">
+      {/* Alert for unlabeled transactions */}
+      {unlabeledCount > 0 && (
+        <Alert className="mb-6 border-amber-200 bg-amber-50">
+          <AlertCircle className="h-4 w-4 text-amber-600" />
+          <AlertDescription className="text-amber-800">
+            <strong>{unlabeledCount} transaction(s)</strong> à catégoriser. 
+            <Button 
+              variant="link" 
+              className="p-0 ml-2 h-auto text-amber-800 underline"
+              onClick={() => setActiveTab('transactions')}
+            >
+              Catégoriser maintenant →
+            </Button>
+          </AlertDescription>
+        </Alert>
+      )}
 
-        {/* Main Tabs */}
-        <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="grid w-full grid-cols-5 mb-8">
-            <TabsTrigger value="dashboard">Tableau de bord</TabsTrigger>
-            <TabsTrigger value="transactions">Transactions</TabsTrigger>
-            <TabsTrigger value="calendar">Échéances</TabsTrigger>
-            <TabsTrigger value="invoices">Factures</TabsTrigger>
-            <TabsTrigger value="settings">Paramètres</TabsTrigger>
-          </TabsList>
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <TabsList className="mb-6">
+          <TabsTrigger value="overview">Vue d'ensemble</TabsTrigger>
+          <TabsTrigger value="transactions">Transactions</TabsTrigger>
+          <TabsTrigger value="deadlines">Échéances</TabsTrigger>
+          <TabsTrigger value="invoices">Factures</TabsTrigger>
+          <TabsTrigger value="settings">Paramètres</TabsTrigger>
+        </TabsList>
 
-          {/* Dashboard Tab */}
-          <TabsContent value="dashboard" className="space-y-6">
-            {/* Alert for unlabeled transactions */}
-            {unlabeledCount > 0 && (
-              <Alert className="border-yellow-500 bg-yellow-50">
-                <AlertCircle className="h-4 w-4 text-yellow-600" />
-                <AlertDescription className="text-yellow-800">
-                  Vous avez {unlabeledCount} transaction(s) non catégorisée(s). 
-                  <Button 
-                    variant="link" 
-                    className="p-0 ml-2 text-yellow-800 underline"
-                    onClick={() => setActiveTab('transactions')}
-                  >
-                    Catégoriser maintenant
-                  </Button>
-                </AlertDescription>
-              </Alert>
-            )}
+        {/* Overview Tab */}
+        <TabsContent value="overview" className="space-y-6">
+          {/* Stats Cards */}
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Revenus</CardTitle>
+                <TrendingUp className="h-4 w-4 text-emerald-500" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-emerald-600">{formatCurrency(totalIncome)}</div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {transactions.filter(t => t.amount > 0).length} transactions
+                </p>
+              </CardContent>
+            </Card>
 
-            {/* Stats Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <Card>
-                <CardHeader className="pb-2">
-                  <CardDescription>Revenus</CardDescription>
-                  <CardTitle className="text-2xl text-green-600">
-                    {formatCurrency(totalIncome)}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="flex items-center text-sm text-green-600">
-                    <TrendingUp className="w-4 h-4 mr-1" />
-                    {transactions.filter(t => t.amount > 0).length} transactions
-                  </div>
-                </CardContent>
-              </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Dépenses</CardTitle>
+                <TrendingDown className="h-4 w-4 text-red-500" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-red-600">{formatCurrency(totalExpenses)}</div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {transactions.filter(t => t.amount < 0).length} transactions
+                </p>
+              </CardContent>
+            </Card>
 
-              <Card>
-                <CardHeader className="pb-2">
-                  <CardDescription>Dépenses</CardDescription>
-                  <CardTitle className="text-2xl text-red-600">
-                    {formatCurrency(totalExpenses)}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="flex items-center text-sm text-red-600">
-                    <TrendingDown className="w-4 h-4 mr-1" />
-                    {transactions.filter(t => t.amount < 0).length} transactions
-                  </div>
-                </CardContent>
-              </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Résultat Net</CardTitle>
+                <Euro className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className={`text-2xl font-bold ${netProfit >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                  {formatCurrency(netProfit)}
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Base taxable: {formatCurrency(netProfit * 0.75)}
+                </p>
+              </CardContent>
+            </Card>
 
-              <Card>
-                <CardHeader className="pb-2">
-                  <CardDescription>Résultat Net</CardDescription>
-                  <CardTitle className={`text-2xl ${netProfit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                    {formatCurrency(netProfit)}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="flex items-center text-sm text-gray-600">
-                    <Euro className="w-4 h-4 mr-1" />
-                    Base IS: {formatCurrency(netProfit * 0.75)}
-                  </div>
-                </CardContent>
-              </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">IS Estimé</CardTitle>
+                <PiggyBank className="h-4 w-4 text-blue-500" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-blue-600">
+                  {formatCurrency(calculateIS(netProfit))}
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {netProfit > 42500 ? '15% + 25%' : '15%'}
+                </p>
+              </CardContent>
+            </Card>
+          </div>
 
-              <Card>
-                <CardHeader className="pb-2">
-                  <CardDescription>IS Estimé</CardDescription>
-                  <CardTitle className="text-2xl text-blue-600">
-                    {formatCurrency(netProfit > 42500 
-                      ? (42500 * 0.15) + ((netProfit - 42500) * 0.25)
-                      : netProfit * 0.15
-                    )}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="flex items-center text-sm text-gray-600">
-                    <Building2 className="w-4 h-4 mr-1" />
-                    {netProfit > 42500 ? '15% + 25%' : '15%'}
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-
+          <div className="grid gap-6 md:grid-cols-2">
             {/* Upcoming Deadlines */}
             <Card>
               <CardHeader>
-                <CardTitle className="flex items-center">
-                  <Bell className="w-5 h-5 mr-2" />
-                  Prochaines Échéances Fiscales
+                <CardTitle className="flex items-center gap-2">
+                  <Calendar className="h-5 w-5" />
+                  Prochaines Échéances
                 </CardTitle>
-                <CardDescription>
-                  Vos déclarations à venir dans les 90 jours
-                </CardDescription>
+                <CardDescription>Vos déclarations fiscales à venir</CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  {deadlines.length === 0 ? (
-                    <p className="text-gray-500 text-center py-4">
-                      Aucune échéance à venir
-                    </p>
-                  ) : (
-                    deadlines.slice(0, 5).map((deadline) => {
-                      const days = getDaysUntil(deadline.dueDate)
-                      return (
-                        <div 
-                          key={deadline.id}
-                          className="flex items-center justify-between p-4 rounded-lg border bg-white"
-                        >
-                          <div className="flex items-center space-x-4">
-                            <div className={`w-3 h-3 rounded-full ${getUrgencyColor(days)}`} />
-                            <div>
-                              <p className="font-medium">{deadline.name}</p>
-                              <p className="text-sm text-gray-500">
-                                {formatDate(deadline.dueDate)}
-                              </p>
-                            </div>
-                          </div>
-                          <div className="flex items-center space-x-4">
-                            <Badge variant={days < 0 ? 'destructive' : days <= 7 ? 'destructive' : 'secondary'}>
-                              {days < 0 
-                                ? `En retard de ${Math.abs(days)} jours`
-                                : days === 0 
-                                  ? "Aujourd'hui"
-                                  : `Dans ${days} jours`
-                              }
-                            </Badge>
-                            <Badge variant="outline">
-                              {deadline.type}
-                            </Badge>
-                          </div>
-                        </div>
-                      )
-                    })
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Quick Actions */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <Card className="cursor-pointer hover:shadow-lg transition-shadow" onClick={() => setActiveTab('transactions')}>
-                <CardContent className="pt-6">
-                  <div className="flex items-center space-x-4">
-                    <div className="p-3 bg-blue-100 rounded-lg">
-                      <Upload className="w-6 h-6 text-blue-600" />
-                    </div>
-                    <div>
-                      <p className="font-medium">Importer CSV</p>
-                      <p className="text-sm text-gray-500">Télécharger vos transactions bancaires</p>
-                    </div>
-                    <ChevronRight className="w-5 h-5 text-gray-400 ml-auto" />
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card className="cursor-pointer hover:shadow-lg transition-shadow" onClick={() => setActiveTab('invoices')}>
-                <CardContent className="pt-6">
-                  <div className="flex items-center space-x-4">
-                    <div className="p-3 bg-green-100 rounded-lg">
-                      <FileText className="w-6 h-6 text-green-600" />
-                    </div>
-                    <div>
-                      <p className="font-medium">Créer une facture</p>
-                      <p className="text-sm text-gray-500">Générer et envoyer une facture</p>
-                    </div>
-                    <ChevronRight className="w-5 h-5 text-gray-400 ml-auto" />
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card className="cursor-pointer hover:shadow-lg transition-shadow" onClick={() => setActiveTab('calendar')}>
-                <CardContent className="pt-6">
-                  <div className="flex items-center space-x-4">
-                    <div className="p-3 bg-purple-100 rounded-lg">
-                      <Calendar className="w-6 h-6 text-purple-600" />
-                    </div>
-                    <div>
-                      <p className="font-medium">Calendrier fiscal</p>
-                      <p className="text-sm text-gray-500">Voir toutes vos échéances</p>
-                    </div>
-                    <ChevronRight className="w-5 h-5 text-gray-400 ml-auto" />
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-          </TabsContent>
-
-          {/* Transactions Tab */}
-          <TabsContent value="transactions" className="space-y-6">
-            {/* Upload Section */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Importer des transactions</CardTitle>
-                <CardDescription>
-                  Téléchargez un fichier CSV de votre banque
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="flex items-center space-x-4">
-                  <Input
-                    type="file"
-                    accept=".csv"
-                    onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
-                    className="flex-1"
-                  />
-                  <Button 
-                    onClick={handleUpload} 
-                    disabled={!selectedFile || uploading}
-                  >
-                    {uploading ? (
-                      <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                    ) : (
-                      <Upload className="w-4 h-4 mr-2" />
-                    )}
-                    Importer
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Transactions List */}
-            <Card>
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <CardTitle>Transactions</CardTitle>
-                    <CardDescription>
-                      {transactions.length} transactions • {unlabeledCount} à catégoriser
-                    </CardDescription>
-                  </div>
-                  <Button variant="outline" size="sm">
-                    <Download className="w-4 h-4 mr-2" />
-                    Exporter
-                  </Button>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Date</TableHead>
-                      <TableHead>Description</TableHead>
-                      <TableHead>Montant</TableHead>
-                      <TableHead>Catégorie</TableHead>
-                      <TableHead>Type</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {transactions.slice(0, 20).map((t) => (
-                      <TableRow key={t.id} className={!t.labeled ? 'bg-yellow-50' : ''}>
-                        <TableCell>{formatDate(t.date)}</TableCell>
-                        <TableCell className="max-w-xs truncate">{t.description}</TableCell>
-                        <TableCell className={t.amount >= 0 ? 'text-green-600' : 'text-red-600'}>
-                          {formatCurrency(t.amount)}
-                        </TableCell>
-                        <TableCell>
-                          <Select
-                            value={t.categoryId || ''}
-                            onValueChange={(value) => labelTransaction(t.id, value, t.type)}
-                          >
-                            <SelectTrigger className="w-40">
-                              <SelectValue placeholder="Sélectionner..." />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {categories
-                                .filter(c => t.amount >= 0 ? c.type === 'income' : c.type === 'expense')
-                                .map((c) => (
-                                  <SelectItem key={c.id} value={c.id}>
-                                    <div className="flex items-center">
-                                      <div 
-                                        className="w-3 h-3 rounded-full mr-2"
-                                        style={{ backgroundColor: c.color }}
-                                      />
-                                      {c.name}
-                                    </div>
-                                  </SelectItem>
-                                ))
-                              }
-                            </SelectContent>
-                          </Select>
-                        </TableCell>
-                        <TableCell>
-                          <Select
-                            value={t.type}
-                            onValueChange={(value) => labelTransaction(t.id, t.categoryId || '', value)}
-                          >
-                            <SelectTrigger className="w-32">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="income">Revenu</SelectItem>
-                              <SelectItem value="expense">Dépense</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          {/* Calendar Tab */}
-          <TabsContent value="calendar" className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Calendrier Fiscal {new Date().getFullYear()}</CardTitle>
-                <CardDescription>
-                  Toutes vos échéances fiscales pour votre SASU
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {['IS', 'TVA', 'CFE', 'LIASSE', 'DAS2'].map((type) => {
-                    const typeDeadlines = deadlines.filter(d => d.type === type)
-                    if (typeDeadlines.length === 0) return null
-                    
-                    const typeNames: Record<string, string> = {
-                      IS: 'Impôt sur les Sociétés',
-                      TVA: 'TVA',
-                      CFE: 'Cotisation Foncière des Entreprises',
-                      LIASSE: 'Liasse Fiscale',
-                      DAS2: 'Déclaration DAS2',
-                    }
+                  {deadlines.slice(0, 5).map((deadline) => {
+                    const days = getDaysUntil(deadline.dueDate)
+                    const isUrgent = days <= 7
+                    const isWarning = days <= 30 && days > 7
                     
                     return (
-                      <div key={type} className="space-y-2">
-                        <h3 className="font-semibold text-lg">{typeNames[type]}</h3>
-                        {typeDeadlines.map((d) => {
-                          const days = getDaysUntil(d.dueDate)
-                          return (
-                            <div 
-                              key={d.id}
-                              className="flex items-center justify-between p-4 rounded-lg border bg-white"
-                            >
-                              <div className="flex items-center space-x-4">
-                                <div className={`w-3 h-3 rounded-full ${getUrgencyColor(days)}`} />
-                                <div>
-                                  <p className="font-medium">{d.name}</p>
-                                  <p className="text-sm text-gray-500">
-                                    Échéance: {formatDate(d.dueDate)}
-                                  </p>
-                                </div>
-                              </div>
-                              <div className="flex items-center space-x-2">
-                                <Badge variant={d.status === 'done' ? 'default' : 'secondary'}>
-                                  {d.status === 'done' ? (
-                                    <CheckCircle className="w-3 h-3 mr-1" />
-                                  ) : (
-                                    <Clock className="w-3 h-3 mr-1" />
-                                  )}
-                                  {d.status === 'done' ? 'Effectué' : 'En attente'}
-                                </Badge>
-                                <span className="text-sm font-medium">
-                                  {days < 0 
-                                    ? `En retard de ${Math.abs(days)} jours`
-                                    : days === 0 
-                                      ? "Aujourd'hui"
-                                      : `Dans ${days} jours`
-                                  }
-                                </span>
-                              </div>
-                            </div>
-                          )
-                        })}
+                      <div key={deadline.id} className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className={`h-2 w-2 rounded-full ${
+                            days < 0 ? 'bg-red-500' : 
+                            isUrgent ? 'bg-red-500' : 
+                            isWarning ? 'bg-amber-500' : 'bg-emerald-500'
+                          }`} />
+                          <div>
+                            <p className="text-sm font-medium leading-none">{deadline.name}</p>
+                            <p className="text-xs text-muted-foreground mt-1">
+                              {formatDate(deadline.dueDate)}
+                            </p>
+                          </div>
+                        </div>
+                        <Badge variant={days < 0 ? 'destructive' : isUrgent ? 'destructive' : 'secondary'}>
+                          {days < 0 ? `${Math.abs(days)}j retard` : `${days}j`}
+                        </Badge>
                       </div>
                     )
                   })}
                 </div>
               </CardContent>
+              <CardFooter>
+                <Button variant="ghost" className="w-full" onClick={() => setActiveTab('deadlines')}>
+                  Voir toutes les échéances
+                </Button>
+              </CardFooter>
             </Card>
-          </TabsContent>
 
-          {/* Invoices Tab */}
-          <TabsContent value="invoices" className="space-y-6">
+            {/* Quick Actions */}
             <Card>
               <CardHeader>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <CardTitle>Factures</CardTitle>
-                    <CardDescription>
-                      Créez et gérez vos factures clients
-                    </CardDescription>
+                <CardTitle>Actions Rapides</CardTitle>
+                <CardDescription>Accès rapide aux fonctions principales</CardDescription>
+              </CardHeader>
+              <CardContent className="grid gap-4">
+                <Button variant="outline" className="justify-start h-auto py-4" onClick={() => setActiveTab('transactions')}>
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-blue-100 rounded-lg">
+                      <Upload className="h-4 w-4 text-blue-600" />
+                    </div>
+                    <div className="text-left">
+                      <p className="font-medium">Importer des transactions</p>
+                      <p className="text-xs text-muted-foreground">Télécharger un fichier CSV bancaire</p>
+                    </div>
                   </div>
-                  <Button>
-                    <Plus className="w-4 h-4 mr-2" />
-                    Nouvelle facture
-                  </Button>
-                </div>
+                </Button>
+                
+                <Button variant="outline" className="justify-start h-auto py-4" onClick={() => setActiveTab('invoices')}>
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-emerald-100 rounded-lg">
+                      <Receipt className="h-4 w-4 text-emerald-600" />
+                    </div>
+                    <div className="text-left">
+                      <p className="font-medium">Créer une facture</p>
+                      <p className="text-xs text-muted-foreground">Générer une nouvelle facture client</p>
+                    </div>
+                  </div>
+                </Button>
+
+                <Button variant="outline" className="justify-start h-auto py-4" onClick={() => setActiveTab('settings')}>
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-purple-100 rounded-lg">
+                      <Building2 className="h-4 w-4 text-purple-600" />
+                    </div>
+                    <div className="text-left">
+                      <p className="font-medium">Paramètres entreprise</p>
+                      <p className="text-xs text-muted-foreground">Configurer vos informations</p>
+                    </div>
+                  </div>
+                </Button>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* IS Breakdown */}
+          {netProfit > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Détail de l'Impôt sur les Sociétés</CardTitle>
+                <CardDescription>Calcul selon le barème progressif</CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="text-center py-12 text-gray-500">
-                  <FileText className="w-12 h-12 mx-auto mb-4 text-gray-300" />
-                  <p>Aucune facture pour le moment</p>
-                  <p className="text-sm mt-2">
-                    Créez votre première facture en cliquant sur "Nouvelle facture"
-                  </p>
+                <div className="space-y-4">
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm">Bénéfice fiscal estimé</span>
+                    <span className="font-mono">{formatCurrency(netProfit * 0.75)}</span>
+                  </div>
+                  <Separator />
+                  
+                  {netProfit > 42500 ? (
+                    <>
+                      <div className="flex justify-between items-center text-sm">
+                        <div className="flex items-center gap-2">
+                          <Badge variant="outline">15%</Badge>
+                          <span>Tranche 0 - 42 500 €</span>
+                        </div>
+                        <span className="font-mono">{formatCurrency(42500 * 0.15)}</span>
+                      </div>
+                      <div className="flex justify-between items-center text-sm">
+                        <div className="flex items-center gap-2">
+                          <Badge variant="outline">25%</Badge>
+                          <span>Tranche &gt; 42 500 €</span>
+                        </div>
+                        <span className="font-mono">{formatCurrency((netProfit - 42500) * 0.25)}</span>
+                      </div>
+                      <Separator />
+                      <div className="flex justify-between items-center font-medium">
+                        <span>Total IS estimé</span>
+                        <span className="font-mono text-lg text-blue-600">{formatCurrency(calculateIS(netProfit))}</span>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="flex justify-between items-center text-sm">
+                        <div className="flex items-center gap-2">
+                          <Badge variant="outline">15%</Badge>
+                          <span>Taux réduit PME</span>
+                        </div>
+                        <span className="font-mono">{formatCurrency(netProfit * 0.15)}</span>
+                      </div>
+                      <Separator />
+                      <div className="flex justify-between items-center font-medium">
+                        <span>Total IS estimé</span>
+                        <span className="font-mono text-lg text-blue-600">{formatCurrency(calculateIS(netProfit))}</span>
+                      </div>
+                    </>
+                  )}
                 </div>
               </CardContent>
             </Card>
-          </TabsContent>
+          )}
+        </TabsContent>
 
-          {/* Settings Tab */}
-          <TabsContent value="settings" className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Informations de l'entreprise</CardTitle>
-                <CardDescription>
-                  Ces informations apparaîtront sur vos factures et déclarations
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <form onSubmit={updateSettings} className="space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <Label htmlFor="companyName">Nom de l'entreprise</Label>
-                      <Input 
-                        id="companyName" 
-                        name="companyName"
-                        defaultValue={settings?.companyName || ''} 
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="companySIREN">SIREN</Label>
-                      <Input 
-                        id="companySIREN" 
-                        name="companySIREN"
-                        defaultValue={settings?.companySIREN || ''} 
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="companySIRET">SIRET</Label>
-                      <Input 
-                        id="companySIRET" 
-                        name="companySIRET"
-                        defaultValue={settings?.companySIRET || ''} 
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="companyTVA">Numéro TVA (optionnel)</Label>
-                      <Input 
-                        id="companyTVA" 
-                        name="companyTVA"
-                        defaultValue={settings?.companyTVA || ''} 
-                        placeholder="FR XX XXXXXXXXX"
-                      />
-                    </div>
-                  </div>
+        {/* Transactions Tab */}
+        <TabsContent value="transactions" className="space-y-6">
+          {/* Upload Section */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Importer des transactions</CardTitle>
+              <CardDescription>Téléchargez un fichier CSV de votre banque</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center gap-4">
+                <Input
+                  type="file"
+                  accept=".csv"
+                  onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
+                  className="flex-1"
+                />
+                <Button onClick={handleUpload} disabled={!selectedFile || uploading}>
+                  {uploading ? (
+                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  ) : (
+                    <Upload className="h-4 w-4 mr-2" />
+                  )}
+                  Importer
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Transactions List */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>Transactions</CardTitle>
+                  <CardDescription>
+                    {transactions.length} transactions • {unlabeledCount} à catégoriser
+                  </CardDescription>
+                </div>
+                <Button variant="outline" size="sm">
+                  <Download className="h-4 w-4 mr-2" />
+                  Exporter Excel
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {transactions.length === 0 ? (
+                <div className="text-center py-12 text-muted-foreground">
+                  <CreditCard className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                  <p>Aucune transaction</p>
+                  <p className="text-sm mt-2">Importez un fichier CSV pour commencer</p>
+                </div>
+              ) : (
+                <div className="rounded-md border">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Date</TableHead>
+                        <TableHead>Description</TableHead>
+                        <TableHead className="text-right">Montant</TableHead>
+                        <TableHead>Catégorie</TableHead>
+                        <TableHead>Type</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {transactions.slice(0, 50).map((t) => (
+                        <TableRow key={t.id} className={!t.labeled ? 'bg-amber-50/50' : ''}>
+                          <TableCell className="font-mono text-sm">{formatDate(t.date)}</TableCell>
+                          <TableCell className="max-w-xs truncate">{t.description}</TableCell>
+                          <TableCell className={`text-right font-mono ${t.amount >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                            {t.amount >= 0 ? '+' : ''}{formatCurrency(t.amount)}
+                          </TableCell>
+                          <TableCell>
+                            <Select
+                              value={t.categoryId || ''}
+                              onValueChange={(value) => labelTransaction(t.id, value, t.type)}
+                            >
+                              <SelectTrigger className="w-40">
+                                <SelectValue placeholder="Catégorie..." />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {categories
+                                  .filter(c => t.amount >= 0 ? c.type === 'income' : c.type === 'expense')
+                                  .map((c) => (
+                                    <SelectItem key={c.id} value={c.id}>
+                                      <div className="flex items-center gap-2">
+                                        <div className="h-2 w-2 rounded-full" style={{ backgroundColor: c.color }} />
+                                        {c.name}
+                                      </div>
+                                    </SelectItem>
+                                  ))}
+                              </SelectContent>
+                            </Select>
+                          </TableCell>
+                          <TableCell>
+                            <Select
+                              value={t.type}
+                              onValueChange={(value) => labelTransaction(t.id, t.categoryId || '', value)}
+                            >
+                              <SelectTrigger className="w-28">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="income">Revenu</SelectItem>
+                                <SelectItem value="expense">Dépense</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Deadlines Tab */}
+        <TabsContent value="deadlines" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Calendrier Fiscal {new Date().getFullYear()}</CardTitle>
+              <CardDescription>Toutes vos échéances fiscales pour votre SASU</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-6">
+                {['IS', 'TVA', 'CFE', 'LIASSE', 'DAS2'].map((type) => {
+                  const typeDeadlines = deadlines.filter(d => d.type === type)
+                  if (typeDeadlines.length === 0) return null
                   
-                  <div>
-                    <Label htmlFor="companyAddress">Adresse</Label>
-                    <Textarea 
-                      id="companyAddress" 
-                      name="companyAddress"
-                      defaultValue={settings?.companyAddress || ''} 
+                  const typeNames: Record<string, string> = {
+                    IS: 'Impôt sur les Sociétés',
+                    TVA: 'TVA',
+                    CFE: 'Cotisation Foncière des Entreprises',
+                    LIASSE: 'Liasse Fiscale',
+                    DAS2: 'Déclaration DAS2',
+                  }
+                  
+                  return (
+                    <div key={type} className="space-y-3">
+                      <h3 className="font-semibold text-lg flex items-center gap-2">
+                        <Badge variant="outline">{type}</Badge>
+                        {typeNames[type]}
+                      </h3>
+                      <div className="rounded-md border">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Échéance</TableHead>
+                              <TableHead>Date</TableHead>
+                              <TableHead>Statut</TableHead>
+                              <TableHead>Jours restants</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {typeDeadlines.map((d) => {
+                              const days = getDaysUntil(d.dueDate)
+                              return (
+                                <TableRow key={d.id}>
+                                  <TableCell className="font-medium">{d.name}</TableCell>
+                                  <TableCell className="font-mono">{formatDate(d.dueDate)}</TableCell>
+                                  <TableCell>
+                                    <Badge variant={d.status === 'done' ? 'default' : 'secondary'}>
+                                      {d.status === 'done' ? (
+                                        <><CheckCircle className="h-3 w-3 mr-1" /> Effectué</>
+                                      ) : (
+                                        <><Clock className="h-3 w-3 mr-1" /> En attente</>
+                                      )}
+                                    </Badge>
+                                  </TableCell>
+                                  <TableCell>
+                                    <span className={days <= 7 ? 'text-red-600 font-medium' : days <= 30 ? 'text-amber-600' : ''}>
+                                      {days < 0 ? `${Math.abs(days)} jours de retard` : days === 0 ? "Aujourd'hui" : `${days} jours`}
+                                    </span>
+                                  </TableCell>
+                                </TableRow>
+                              )
+                            })}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Invoices Tab */}
+        <TabsContent value="invoices" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>Factures</CardTitle>
+                  <CardDescription>Créez et gérez vos factures clients</CardDescription>
+                </div>
+                <Button>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Nouvelle facture
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="text-center py-12 text-muted-foreground">
+                <FileText className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                <p>Aucune facture pour le moment</p>
+                <p className="text-sm mt-2">Créez votre première facture en cliquant sur "Nouvelle facture"</p>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Settings Tab */}
+        <TabsContent value="settings" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Informations de l'entreprise</CardTitle>
+              <CardDescription>Ces informations apparaîtront sur vos factures et déclarations</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={updateSettings} className="space-y-6">
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="companyName">Nom de l'entreprise</Label>
+                    <Input 
+                      id="companyName" 
+                      name="companyName"
+                      defaultValue={settings?.companyName || ''} 
+                      placeholder="Ma SASU"
                     />
                   </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <Label htmlFor="vatRegime">Régime TVA</Label>
-                      <Select name="vatRegime" defaultValue={settings?.vatRegime || 'franchise'}>
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="franchise">Franchise en base</SelectItem>
-                          <SelectItem value="reel_simplifie">Réel simplifié</SelectItem>
-                          <SelectItem value="reel_normal">Réel normal</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div>
-                      <Label htmlFor="email">Email pour les rappels</Label>
-                      <Input 
-                        id="email" 
-                        name="email"
-                        type="email"
-                        defaultValue={settings?.email || ''} 
-                      />
-                    </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="companySIREN">SIREN</Label>
+                    <Input 
+                      id="companySIREN" 
+                      name="companySIREN"
+                      defaultValue={settings?.companySIREN || ''} 
+                      placeholder="123 456 789"
+                    />
                   </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="companySIRET">SIRET</Label>
+                    <Input 
+                      id="companySIRET" 
+                      name="companySIRET"
+                      defaultValue={settings?.companySIRET || ''} 
+                      placeholder="123 456 789 00012"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="companyTVA">Numéro TVA (optionnel)</Label>
+                    <Input 
+                      id="companyTVA" 
+                      name="companyTVA"
+                      defaultValue={settings?.companyTVA || ''} 
+                      placeholder="FR XX XXXXXXXXX"
+                    />
+                  </div>
+                </div>
+                
+                <div className="space-y-2">
+                  <Label htmlFor="companyAddress">Adresse</Label>
+                  <Textarea 
+                    id="companyAddress" 
+                    name="companyAddress"
+                    defaultValue={settings?.companyAddress || ''} 
+                    placeholder="123 Rue Example&#10;75001 Paris"
+                    rows={3}
+                  />
+                </div>
 
-                  <Button type="submit">
-                    <CheckCircle className="w-4 h-4 mr-2" />
-                    Enregistrer les paramètres
-                  </Button>
-                </form>
-              </CardContent>
-            </Card>
-          </TabsContent>
-        </Tabs>
-      </div>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="vatRegime">Régime TVA</Label>
+                    <Select name="vatRegime" defaultValue={settings?.vatRegime || 'franchise'}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="franchise">Franchise en base</SelectItem>
+                        <SelectItem value="reel_simplifie">Réel simplifié</SelectItem>
+                        <SelectItem value="reel_normal">Réel normal</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="email">Email pour les rappels</Label>
+                    <Input 
+                      id="email" 
+                      name="email"
+                      type="email"
+                      defaultValue={settings?.email || ''} 
+                      placeholder="contact@masasu.fr"
+                    />
+                  </div>
+                </div>
+
+                <Button type="submit">
+                  <CheckCircle className="h-4 w-4 mr-2" />
+                  Enregistrer les paramètres
+                </Button>
+              </form>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
     </div>
   )
 }

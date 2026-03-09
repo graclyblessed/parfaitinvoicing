@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { Suspense } from "react";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
@@ -37,7 +38,9 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased bg-background text-foreground`}
       >
         <SidebarProvider>
-          <AppSidebar />
+          <Suspense fallback={<div className="w-[var(--sidebar-width)]" />}>
+            <AppSidebar />
+          </Suspense>
           <SidebarInset>
             <SiteHeader />
             <main className="flex-1">

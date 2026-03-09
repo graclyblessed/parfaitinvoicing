@@ -1,9 +1,6 @@
 // This is your Prisma schema file,
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -13,20 +10,123 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model User {
-  id        String   @id @default(cuid())
-  email     String   @unique
-  name      String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+// User settings for company info
+model Settings {
+  id              String   @id @default(cuid())
+  companyName     String
+  companyAddress  String
+  companySIRET    String
+  companySIREN    String
+  companyTVA      String?
+  vatRegime       String   @default("franchise") // franchise, reel_simplifie, reel_normal
+  fiscalYearStart Int      @default(1)  // Month (1 = January)
+  fiscalYearEnd   Int      @default(12) // Month (12 = December)
+  email           String
+  googleCalendarId String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 }
 
-model Post {
-  id        String   @id @default(cuid())
-  title     String
-  content   String?
-  published Boolean  @default(false)
-  authorId  String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+// Transaction categories for labeling
+model Category {
+  id          String   @id @default(cuid())
+  name        String
+  type        String   // income, expense
+  color       String   @default("#3B82F6")
+  icon        String?
+  isDefault   Boolean  @default(false)
+  taxDeductible Boolean @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  transactions Transaction[]
+  expenses    Expense[]
+}
+
+// Bank transactions from CSV
+model Transaction {
+  id              String   @id @default(cuid())
+  date            DateTime
+  amount          Float
+  description     String
+  reference       String?
+  categoryId      String?
+  category        Category? @relation(fields: [categoryId], references: [id])
+  type            String   @default("unknown") // income, expense, unknown
+  labeled         Boolean  @default(false)
+  bankAccount     String?
+  rawCsvData      String?  // Original CSV row
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+// Invoices created
+model Invoice {
+  id              String   @id @default(cuid())
+  invoiceNumber   String   @unique
+  date            DateTime
+  dueDate         DateTime
+  clientName      String
+  clientAddress   String?
+  clientSIRET     String?
+  clientTVA       String?
+  items           String   // JSON array of line items
+  subtotalHT      Float
+  tvaRate         Float    @default(20.0)
+  tvaAmount       Float
+  totalTTC        Float
+  status          String   @default("draft") // draft, sent, paid, cancelled
+  paidAt          DateTime?
+  notes           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+// Tax deadlines
+model TaxDeadline {
+  id              String   @id @default(cuid())
+  name            String
+  type            String   // IS, TVA, CFE, TVS, DAS2, LIASSE
+  dueDate         DateTime
+  periodStart     DateTime?
+  periodEnd       DateTime?
+  amount          Float?
+  status          String   @default("pending") // pending, done, overdue
+  notes           String?
+  reminderSent    Boolean  @default(false)
+  reminderSentAt  DateTime?
+  calendarEventId String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+// Expense entries (manual)
+model Expense {
+  id              String   @id @default(cuid())
+  date            DateTime
+  amount          Float
+  description     String
+  categoryId      String?
+  category        Category? @relation(fields: [categoryId], references: [id])
+  receiptUrl      String?
+  isPaid          Boolean  @default(true)
+  paymentMethod   String?  // card, transfer, cash, check
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+// Cash flow projections
+model CashFlowProjection {
+  id              String   @id @default(cuid())
+  month           Int
+  year            Int
+  projectedIncome Float    @default(0)
+  projectedExpense Float   @default(0)
+  taxPayment      Float    @default(0)
+  actualIncome    Float    @default(0)
+  actualExpense   Float    @default(0)
+  notes           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  @@unique([month, year])
 }

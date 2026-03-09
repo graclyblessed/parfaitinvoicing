@@ -62,6 +62,22 @@ interface Settings {
   email: string
 }
 
+interface Invoice {
+  id: string
+  invoiceNumber: string
+  date: string
+  dueDate: string
+  clientName: string
+  totalTTC: number
+  status: string
+}
+
+interface InvoiceItem {
+  description: string
+  quantity: number
+  unitPrice: number
+}
+
 // Main component
 export default function TaxDashboard() {
   const [activeTab, setActiveTab] = useState('overview')
@@ -69,9 +85,22 @@ export default function TaxDashboard() {
   const [categories, setCategories] = useState<Category[]>([])
   const [deadlines, setDeadlines] = useState<Deadline[]>([])
   const [settings, setSettings] = useState<Settings | null>(null)
+  const [invoices, setInvoices] = useState<Invoice[]>([])
   const [loading, setLoading] = useState(true)
   const [uploading, setUploading] = useState(false)
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
+  const [showInvoiceForm, setShowInvoiceForm] = useState(false)
+  const [invoiceItems, setInvoiceItems] = useState<InvoiceItem[]>([
+    { description: '', quantity: 1, unitPrice: 0 }
+  ])
+  const [invoiceClient, setInvoiceClient] = useState({
+    name: '',
+    address: '',
+    siret: '',
+    tva: '',
+  })
+  const [invoiceTvaRate, setInvoiceTvaRate] = useState(20)
+  const [exporting, setExporting] = useState(false)
 
   // Fetch initial data
   useEffect(() => {
@@ -91,24 +120,27 @@ export default function TaxDashboard() {
   const fetchAllData = async () => {
     setLoading(true)
     try {
-      const [transRes, catRes, deadRes, setRes] = await Promise.all([
+      const [transRes, catRes, deadRes, setRes, invRes] = await Promise.all([
         fetch('/api/transactions'),
         fetch('/api/categories'),
         fetch('/api/deadlines?upcoming=90'),
         fetch('/api/settings'),
+        fetch('/api/invoices'),
       ])
       
-      const [transData, catData, deadData, setData] = await Promise.all([
+      const [transData, catData, deadData, setData, invData] = await Promise.all([
         transRes.json(),
         catRes.json(),
         deadRes.json(),
         setRes.json(),
+        invRes.json(),
       ])
       
       setTransactions(transData.transactions || [])
       setCategories(catData.categories || [])
       setDeadlines(deadData.deadlines || [])
       setSettings(setData.settings || null)
+      setInvoices(invData.invoices || [])
     } catch (error) {
       console.error('Error fetching data:', error)
     } finally {
@@ -220,6 +252,109 @@ export default function TaxDashboard() {
     if (profit <= 0) return 0
     if (profit <= 42500) return profit * 0.15
     return (42500 * 0.15) + ((profit - 42500) * 0.25)
+  }
+
+  // Add invoice item
+  const addInvoiceItem = () => {
+    setInvoiceItems([...invoiceItems, { description: '', quantity: 1, unitPrice: 0 }])
+  }
+
+  // Update invoice item
+  const updateInvoiceItem = (index: number, field: keyof InvoiceItem, value: string | number) => {
+    const newItems = [...invoiceItems]
+    newItems[index] = { ...newItems[index], [field]: value }
+    setInvoiceItems(newItems)
+  }
+
+  // Remove invoice item
+  const removeInvoiceItem = (index: number) => {
+    if (invoiceItems.length > 1) {
+      setInvoiceItems(invoiceItems.filter((_, i) => i !== index))
+    }
+  }
+
+  // Calculate invoice totals
+  const calculateInvoiceTotals = () => {
+    const subtotal = invoiceItems.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0)
+    const tva = subtotal * (invoiceTvaRate / 100)
+    const total = subtotal + tva
+    return { subtotal, tva, total }
+  }
+
+  // Create invoice
+  const createInvoice = async () => {
+    if (!invoiceClient.name) {
+      alert('Veuillez entrer le nom du client')
+      return
+    }
+    if (invoiceItems.some(item => !item.description || item.unitPrice <= 0)) {
+      alert('Veuillez remplir tous les articles')
+      return
+    }
+
+    try {
+      const res = await fetch('/api/invoices', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          clientName: invoiceClient.name,
+          clientAddress: invoiceClient.address,
+          clientSIRET: invoiceClient.siret,
+          clientTVA: invoiceClient.tva,
+          items: invoiceItems,
+          tvaRate: invoiceTvaRate,
+        }),
+      })
+      const data = await res.json()
+      if (data.invoice) {
+        alert(`Facture ${data.invoice.invoiceNumber} créée!`)
+        setShowInvoiceForm(false)
+        setInvoiceItems([{ description: '', quantity: 1, unitPrice: 0 }])
+        setInvoiceClient({ name: '', address: '', siret: '', tva: '' })
+        fetchAllData()
+      }
+    } catch (error) {
+      console.error('Error creating invoice:', error)
+    }
+  }
+
+  // Download invoice PDF
+  const downloadInvoicePDF = async (id: string) => {
+    window.open(`/api/invoices/${id}/pdf`, '_blank')
+  }
+
+  // Mark invoice as paid
+  const markInvoicePaid = async (id: string) => {
+    try {
+      await fetch('/api/invoices', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, status: 'paid', paidAt: new Date().toISOString() }),
+      })
+      fetchAllData()
+    } catch (error) {
+      console.error('Error updating invoice:', error)
+    }
+  }
+
+  // Export to Excel
+  const exportToExcel = async () => {
+    setExporting(true)
+    try {
+      const year = new Date().getFullYear()
+      const res = await fetch(`/api/export?year=${year}`)
+      const blob = await res.blob()
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `export_${year}.xlsx`
+      a.click()
+      window.URL.revokeObjectURL(url)
+    } catch (error) {
+      console.error('Error exporting:', error)
+    } finally {
+      setExporting(false)
+    }
   }
 
   if (loading) {
@@ -509,8 +644,12 @@ export default function TaxDashboard() {
                     {transactions.length} transactions • {unlabeledCount} à catégoriser
                   </CardDescription>
                 </div>
-                <Button variant="outline" size="sm">
-                  <Download className="h-4 w-4 mr-2" />
+                <Button variant="outline" size="sm" onClick={exportToExcel} disabled={exporting}>
+                  {exporting ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <Download className="h-4 w-4 mr-2" />
+                  )}
                   Exporter Excel
                 </Button>
               </div>
@@ -662,25 +801,210 @@ export default function TaxDashboard() {
 
         {/* Invoices Tab */}
         <TabsContent value="invoices" className="space-y-6">
+          {/* Invoice Form */}
+          {showInvoiceForm && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Nouvelle Facture</CardTitle>
+                <CardDescription>Créez une facture pour votre client</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                {/* Client Info */}
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label>Nom du client *</Label>
+                    <Input
+                      value={invoiceClient.name}
+                      onChange={(e) => setInvoiceClient({ ...invoiceClient, name: e.target.value })}
+                      placeholder="Nom de l'entreprise"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>SIRET client</Label>
+                    <Input
+                      value={invoiceClient.siret}
+                      onChange={(e) => setInvoiceClient({ ...invoiceClient, siret: e.target.value })}
+                      placeholder="123 456 789 00012"
+                    />
+                  </div>
+                </div>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label>Adresse</Label>
+                    <Input
+                      value={invoiceClient.address}
+                      onChange={(e) => setInvoiceClient({ ...invoiceClient, address: e.target.value })}
+                      placeholder="Adresse du client"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>N° TVA client</Label>
+                    <Input
+                      value={invoiceClient.tva}
+                      onChange={(e) => setInvoiceClient({ ...invoiceClient, tva: e.target.value })}
+                      placeholder="FR XX XXXXXXXXX"
+                    />
+                  </div>
+                </div>
+
+                {/* Invoice Items */}
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <Label>Articles</Label>
+                    <Button variant="outline" size="sm" onClick={addInvoiceItem}>
+                      <Plus className="h-4 w-4 mr-1" /> Ajouter
+                    </Button>
+                  </div>
+                  {invoiceItems.map((item, index) => (
+                    <div key={index} className="grid gap-2 md:grid-cols-4 items-end">
+                      <div className="md:col-span-2">
+                        <Label className="text-xs text-muted-foreground">Description</Label>
+                        <Input
+                          value={item.description}
+                          onChange={(e) => updateInvoiceItem(index, 'description', e.target.value)}
+                          placeholder="Description du service"
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-xs text-muted-foreground">Quantité</Label>
+                        <Input
+                          type="number"
+                          value={item.quantity}
+                          onChange={(e) => updateInvoiceItem(index, 'quantity', parseInt(e.target.value) || 0)}
+                          min="1"
+                        />
+                      </div>
+                      <div className="flex gap-2">
+                        <div className="flex-1">
+                          <Label className="text-xs text-muted-foreground">Prix unitaire €</Label>
+                          <Input
+                            type="number"
+                            value={item.unitPrice}
+                            onChange={(e) => updateInvoiceItem(index, 'unitPrice', parseFloat(e.target.value) || 0)}
+                            min="0"
+                            step="0.01"
+                          />
+                        </div>
+                        {invoiceItems.length > 1 && (
+                          <Button variant="ghost" size="icon" onClick={() => removeInvoiceItem(index)} className="mt-6">
+                            <span className="text-red-500">×</span>
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* TVA Rate */}
+                <div className="flex items-center gap-4">
+                  <Label>Taux TVA</Label>
+                  <Select value={invoiceTvaRate.toString()} onValueChange={(v) => setInvoiceTvaRate(parseInt(v))}>
+                    <SelectTrigger className="w-32">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="0">0%</SelectItem>
+                      <SelectItem value="5.5">5.5%</SelectItem>
+                      <SelectItem value="10">10%</SelectItem>
+                      <SelectItem value="20">20%</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Totals */}
+                <div className="border-t pt-4 space-y-2">
+                  <div className="flex justify-between">
+                    <span>Sous-total HT</span>
+                    <span className="font-mono">{formatCurrency(calculateInvoiceTotals().subtotal)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>TVA ({invoiceTvaRate}%)</span>
+                    <span className="font-mono">{formatCurrency(calculateInvoiceTotals().tva)}</span>
+                  </div>
+                  <div className="flex justify-between font-bold text-lg">
+                    <span>Total TTC</span>
+                    <span className="font-mono">{formatCurrency(calculateInvoiceTotals().total)}</span>
+                  </div>
+                </div>
+
+                {/* Actions */}
+                <div className="flex gap-4">
+                  <Button onClick={createInvoice} className="flex-1">
+                    <CheckCircle className="h-4 w-4 mr-2" />
+                    Créer la facture
+                  </Button>
+                  <Button variant="outline" onClick={() => setShowInvoiceForm(false)}>
+                    Annuler
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Invoice List */}
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
                 <div>
                   <CardTitle>Factures</CardTitle>
-                  <CardDescription>Créez et gérez vos factures clients</CardDescription>
+                  <CardDescription>{invoices.length} facture(s)</CardDescription>
                 </div>
-                <Button>
+                <Button onClick={() => setShowInvoiceForm(!showInvoiceForm)}>
                   <Plus className="h-4 w-4 mr-2" />
                   Nouvelle facture
                 </Button>
               </div>
             </CardHeader>
             <CardContent>
-              <div className="text-center py-12 text-muted-foreground">
-                <FileText className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                <p>Aucune facture pour le moment</p>
-                <p className="text-sm mt-2">Créez votre première facture en cliquant sur "Nouvelle facture"</p>
-              </div>
+              {invoices.length === 0 ? (
+                <div className="text-center py-12 text-muted-foreground">
+                  <FileText className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                  <p>Aucune facture pour le moment</p>
+                  <p className="text-sm mt-2">Créez votre première facture</p>
+                </div>
+              ) : (
+                <div className="rounded-md border">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>N° Facture</TableHead>
+                        <TableHead>Client</TableHead>
+                        <TableHead>Date</TableHead>
+                        <TableHead className="text-right">Montant TTC</TableHead>
+                        <TableHead>Statut</TableHead>
+                        <TableHead className="text-center">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {invoices.map((invoice) => (
+                        <TableRow key={invoice.id}>
+                          <TableCell className="font-mono font-medium">{invoice.invoiceNumber}</TableCell>
+                          <TableCell>{invoice.clientName}</TableCell>
+                          <TableCell>{formatDate(invoice.date)}</TableCell>
+                          <TableCell className="text-right font-mono">{formatCurrency(invoice.totalTTC)}</TableCell>
+                          <TableCell>
+                            <Badge variant={invoice.status === 'paid' ? 'default' : invoice.status === 'sent' ? 'secondary' : 'outline'}>
+                              {invoice.status === 'paid' ? 'Payée' : invoice.status === 'sent' ? 'Envoyée' : 'Brouillon'}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center justify-center gap-2">
+                              <Button variant="ghost" size="sm" onClick={() => downloadInvoicePDF(invoice.id)}>
+                                <Download className="h-4 w-4" />
+                              </Button>
+                              {invoice.status !== 'paid' && (
+                                <Button variant="ghost" size="sm" onClick={() => markInvoicePaid(invoice.id)}>
+                                  <CheckCircle className="h-4 w-4 text-emerald-600" />
+                                </Button>
+                              )}
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>

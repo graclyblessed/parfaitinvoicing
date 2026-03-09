@@ -131,3 +131,103 @@ model CashFlowProjection {
   
   @@unique([month, year])
 }
+
+// Liasse Fiscale (Tax Return) for SASU - Régime Simplifié
+model LiasseFiscale {
+  id              String   @id @default(cuid())
+  year            Int
+  status          String   @default("draft") // draft, complete, filed
+  
+  // Actif (Balance Sheet Assets) - Form 2033-A
+  immoIncorporelles Float   @default(0)
+  immoCorporelles  Float    @default(0)
+  immoFinancieres  Float    @default(0)
+  totalImmo        Float    @default(0)
+  stocks           Float    @default(0)
+  creancesClients  Float    @default(0)
+  autresCreances   Float    @default(0)
+  disponibilites   Float    @default(0)
+  totalActifCirculant Float @default(0)
+  totalActif       Float    @default(0)
+  
+  // Passif (Balance Sheet Liabilities)
+  capital          Float    @default(0)
+  reserves         Float    @default(0)
+  reportANouveau   Float    @default(0)
+  resultatExercice Float    @default(0)
+  totalCapitauxPropres Float @default(0)
+  emprunts         Float    @default(0)
+  dettesFournisseurs Float @default(0)
+  dettesFiscales   Float    @default(0)
+  dettesSociales   Float    @default(0)
+  autresDettes     Float    @default(0)
+  totalDettes      Float    @default(0)
+  totalPassif      Float    @default(0)
+  
+  // Compte de Résultat - Form 2033-D
+  chiffreAffaires  Float    @default(0)
+  productionStockee Float   @default(0)
+  productionImmo   Float    @default(0)
+  subventions      Float    @default(0)
+  autresProduits   Float    @default(0)
+  totalProduits    Float    @default(0)
+  
+  achats           Float    @default(0)
+  variationStocks  Float    @default(0)
+  servicesExterieurs Float @default(0)
+  chargesPersonnel Float    @default(0)
+  impotsTaxes      Float    @default(0)
+  dotationsAmort   Float    @default(0)
+  dotationsProvisions Float @default(0)
+  chargesFinancieres Float @default(0)
+  chargesExceptionnelles Float @default(0)
+  totalCharges     Float    @default(0)
+  
+  resultatCourant  Float    @default(0)
+  resultatExceptionnel Float @default(0)
+  impotSurSocietes Float    @default(0)
+  resultatNet      Float    @default(0)
+  
+  // Informations Complémentaires - Form 2033-G
+  effectif         Int      @default(0)
+  dureeExercice    Int      @default(12)
+  loyers           Float    @default(0)
+  chargesLocatives Float    @default(0)
+  entretienReparation Float @default(0)
+  primesAssurance  Float    @default(0)
+  fraisDeplacement Float    @default(0)
+  fraisPostaux     Float    @default(0)
+  fraisTelecom     Float    @default(0)
+  fraisBancaires   Float    @default(0)
+  cadeaux          Float    @default(0)
+  
+  // Immobilisations details
+  materielsOutils  Float    @default(0)
+  materielsBureau  Float    @default(0)
+  materielsInfo    Float    @default(0)
+  vehicules        Float    @default(0)
+  
+  // TVA
+  tvaCollectee     Float    @default(0)
+  tvaDeductible    Float    @default(0)
+  tvaDue           Float    @default(0)
+  
+  // Rémunérations
+  remunerationGerant Float  @default(0)
+  cotisationsSociales Float @default(0)
+  
+  // Déclaration Résultat - Form 2065
+  resultatComptable Float   @default(0)
+  retraitements    Float    @default(0)
+  resultatFiscal   Float    @default(0)
+  chargesDeductibles Float @default(0)
+  deficitAnterieur Float    @default(0)
+  deficitUtilise   Float    @default(0)
+  baseImposableIS  Float    @default(0)
+  isAPayer         Float    @default(0)
+  
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  
+  @@unique([year])
+}

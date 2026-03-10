@@ -55,8 +55,10 @@ function LoginForm() {
         if (!data.canRegister && tabParam === 'register') {
           setActiveTab('login')
         }
-      } catch {
-        setCanRegister(false)
+      } catch (err) {
+        // If API fails, allow registration by default (first user setup)
+        console.error('Failed to check registration status:', err)
+        setCanRegister(true)
       } finally {
         setCheckingRegistration(false)
       }
@@ -122,14 +124,17 @@ function LoginForm() {
 
       if (data.error) {
         setError(data.error)
-      } else {
+      } else if (data.success) {
         setSuccess('Compte créé avec succès ! Vous pouvez maintenant vous connecter.')
         setActiveTab('login')
         setLoginEmail(registerEmail)
         setCanRegister(false) // Disable registration after successful creation
+      } else {
+        setError('Réponse inattendue du serveur')
       }
-    } catch {
-      setError('Une erreur est survenue')
+    } catch (err) {
+      console.error('Registration error:', err)
+      setError('Erreur de connexion au serveur. Vérifiez votre connexion internet.')
     } finally {
       setLoading(false)
     }

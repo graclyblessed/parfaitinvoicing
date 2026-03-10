@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { sendReminderEmail } from '@/lib/email'
 
-// POST - Send reminder email for upcoming deadlines
+// POST - Send reminder email for upcoming deadlines (called by cron or manually)
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
@@ -11,34 +12,75 @@ export async function POST(request: NextRequest) {
     const settings = await db.settings.findFirst()
     
     if (!settings?.email) {
-      return NextResponse.json({ error: 'Email not configured' }, { status: 400 })
+      return NextResponse.json({ error: 'Email not configured in settings' }, { status: 400 })
     }
 
-    // Get upcoming deadlines
+    // Get current time boundaries
     const now = new Date()
-    const futureDate = new Date(now.getTime() + days * 24 * 60 * 60 * 1000)
-    
-    const deadlines = await db.taxDeadline.findMany({
+    const in3Days = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000)
+    const in7Days = new Date(now.getTime() + days * 24 * 60 * 60 * 1000)
+
+    // Get urgent deadlines (within 3 days) - not yet reminded
+    const urgentDeadlines = await db.taxDeadline.findMany({
       where: {
         dueDate: {
           gte: now,
-          lte: futureDate,
+          lte: in3Days,
+        },
+        status: 'pending',
+        reminderSent: false,
+      },
+    })
+    
+    // Get upcoming deadlines (3-7 days) - not yet reminded
+    const upcomingDeadlines = await db.taxDeadline.findMany({
+      where: {
+        dueDate: {
+          gt: in3Days,
+          lte: in7Days,
         },
         status: 'pending',
         reminderSent: false,
       },
     })
 
-    if (deadlines.length === 0) {
-      return NextResponse.json({ message: 'No deadlines to remind' })
+    // If no deadlines to remind about
+    if (urgentDeadlines.length === 0 && upcomingDeadlines.length === 0) {
+      return NextResponse.json({ 
+        message: 'No deadlines requiring reminders',
+        sent: 0 
+      })
     }
 
-    // Note: In production, you would use a real email service like Resend, SendGrid, or nodemailer
-    // For now, we'll just mark them as sent and return the list
-    
-    // Mark reminders as sent
+    // Send the email
+    const result = await sendReminderEmail({
+      to: settings.email,
+      companyName: settings.companyName,
+      urgentDeadlines: urgentDeadlines.map(d => ({
+        name: d.name,
+        type: d.type,
+        dueDate: d.dueDate,
+        amount: d.amount || undefined,
+      })),
+      upcomingDeadlines: upcomingDeadlines.map(d => ({
+        name: d.name,
+        type: d.type,
+        dueDate: d.dueDate,
+        amount: d.amount || undefined,
+      })),
+    })
+
+    if (!result.success) {
+      return NextResponse.json({ 
+        error: result.error || 'Failed to send email',
+        hint: 'Make sure RESEND_API_KEY is set in your Vercel environment variables'
+      }, { status: 500 })
+    }
+
+    // Mark all as reminded
+    const allDeadlines = [...urgentDeadlines, ...upcomingDeadlines]
     await Promise.all(
-      deadlines.map((d) =>
+      allDeadlines.map((d) =>
         db.taxDeadline.update({
           where: { id: d.id },
           data: {
@@ -49,22 +91,17 @@ export async function POST(request: NextRequest) {
       )
     )
 
-    // Log what would be sent
-    console.log(`Would send email to ${settings.email} for ${deadlines.length} deadlines:`)
-    deadlines.forEach((d) => {
-      console.log(`  - ${d.name} due ${d.dueDate.toLocaleDateString('fr-FR')}`)
-    })
-
     return NextResponse.json({
       success: true,
-      sent: deadlines.length,
+      sent: allDeadlines.length,
       email: settings.email,
-      deadlines: deadlines.map((d) => ({
+      urgent: urgentDeadlines.length,
+      upcoming: upcomingDeadlines.length,
+      deadlines: allDeadlines.map((d) => ({
         name: d.name,
         dueDate: d.dueDate,
         type: d.type,
       })),
-      message: `In production, this would send an email to ${settings.email}`,
     })
   } catch (error) {
     console.error('Error sending reminders:', error)
@@ -72,13 +109,16 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// GET - Check for upcoming reminders (for cron job)
+// GET - Check for upcoming reminders (for cron job health check)
 export async function GET() {
   try {
     const settings = await db.settings.findFirst()
     
     if (!settings?.email) {
-      return NextResponse.json({ configured: false })
+      return NextResponse.json({ 
+        configured: false,
+        message: 'Email not configured in settings. Go to Paramètres to add your email.'
+      })
     }
 
     const now = new Date()
@@ -107,9 +147,14 @@ export async function GET() {
       },
     })
 
+    // Check if email service is configured
+    const emailConfigured = !!process.env.RESEND_API_KEY
+
     return NextResponse.json({
       configured: true,
       email: settings.email,
+      emailServiceConfigured: emailConfigured,
+      emailService: emailConfigured ? 'Resend' : 'Not configured',
       urgent: urgentDeadlines.length,
       upcoming: upcomingDeadlines.length,
       urgentDeadlines: urgentDeadlines.map((d) => ({
@@ -117,13 +162,18 @@ export async function GET() {
         name: d.name,
         dueDate: d.dueDate,
         type: d.type,
+        amount: d.amount,
       })),
       upcomingDeadlines: upcomingDeadlines.map((d) => ({
         id: d.id,
         name: d.name,
         dueDate: d.dueDate,
         type: d.type,
+        amount: d.amount,
       })),
+      message: emailConfigured 
+        ? 'Email reminders are fully configured and ready.'
+        : 'Add RESEND_API_KEY to Vercel environment variables to enable email sending.',
     })
   } catch (error) {
     console.error('Error checking reminders:', error)

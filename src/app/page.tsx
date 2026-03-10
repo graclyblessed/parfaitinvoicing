@@ -112,6 +112,7 @@ export default function TaxDashboard() {
   const [showReceiptModal, setShowReceiptModal] = useState<{ id: string; url: string; name: string } | null>(null)
   const [currentPage, setCurrentPage] = useState(1)
   const itemsPerPage = 100
+  const [selectedFiscalYear, setSelectedFiscalYear] = useState<number | null>(null)
 
   // Fetch initial data
   useEffect(() => {
@@ -159,11 +160,63 @@ export default function TaxDashboard() {
     }
   }
 
-  // Calculate totals
-  const totalIncome = transactions.filter(t => t.amount > 0).reduce((sum, t) => sum + t.amount, 0)
-  const totalExpenses = Math.abs(transactions.filter(t => t.amount < 0).reduce((sum, t) => sum + t.amount, 0))
+  // Get available fiscal years from transactions
+  const getAvailableFiscalYears = () => {
+    const years = new Set<number>()
+    const currentYear = new Date().getFullYear()
+    
+    // Always show current and next fiscal years
+    years.add(currentYear)
+    years.add(currentYear + 1)
+    years.add(currentYear - 1)
+    
+    // Also add years from transactions
+    transactions.forEach(t => {
+      const date = new Date(t.date)
+      const year = date.getFullYear()
+      const month = date.getMonth() + 1 // 1-12
+      
+      // If month is December, it's start of next fiscal year
+      if (month === 12) {
+        years.add(year + 1)
+      } else {
+        years.add(year)
+      }
+    })
+    
+    return Array.from(years).sort((a, b) => b - a)
+  }
+
+  // Filter transactions by fiscal year (Dec 1 to Nov 30)
+  const filteredTransactions = selectedFiscalYear 
+    ? transactions.filter(t => {
+        const date = new Date(t.date)
+        const year = date.getFullYear()
+        const month = date.getMonth() + 1 // 1-12
+        
+        // Fiscal year YYYY runs from Dec 1 (YYYY-1) to Nov 30 (YYYY)
+        // e.g., FY 2026 = Dec 1, 2025 to Nov 30, 2026
+        if (month === 12) {
+          // December belongs to FY (year + 1)
+          return (year + 1) === selectedFiscalYear
+        } else {
+          // Jan-Nov belongs to FY year
+          return year === selectedFiscalYear
+        }
+      })
+    : transactions
+
+  // Get fiscal year label
+  const getFiscalYearLabel = (fy: number) => {
+    return `01 déc. ${fy - 1} - 30 nov. ${fy}`
+  }
+
+  // Calculate totals based on filtered transactions
+  const totalIncome = filteredTransactions.filter(t => t.amount > 0).reduce((sum, t) => sum + t.amount, 0)
+  const totalExpenses = Math.abs(filteredTransactions.filter(t => t.amount < 0).reduce((sum, t) => sum + t.amount, 0))
   const netProfit = totalIncome - totalExpenses
   const unlabeledCount = transactions.filter(t => !t.labeled).length
+  const filteredUnlabeledCount = filteredTransactions.filter(t => !t.labeled).length
 
   // Pagination
   const totalPages = Math.ceil(transactions.length / itemsPerPage)
@@ -502,6 +555,37 @@ export default function TaxDashboard() {
 
         {/* Overview Tab */}
         <TabsContent value="overview" className="space-y-6">
+          {/* Fiscal Year Header */}
+          <Card className="bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200">
+            <CardContent className="py-4">
+              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                <div>
+                  <h2 className="text-xl font-bold text-blue-900">Aperçu</h2>
+                  <p className="text-sm text-blue-700">Suivez vos chiffres clés et votre activité en temps réel.</p>
+                </div>
+                <div className="flex items-center gap-3">
+                  <Label className="text-sm font-medium text-blue-800">Exercice:</Label>
+                  <Select 
+                    value={selectedFiscalYear?.toString() || 'all'} 
+                    onValueChange={(v) => setSelectedFiscalYear(v === 'all' ? null : parseInt(v))}
+                  >
+                    <SelectTrigger className="w-56 bg-white">
+                      <SelectValue placeholder="Tous les exercices" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Tous les exercices</SelectItem>
+                      {getAvailableFiscalYears().map(fy => (
+                        <SelectItem key={fy} value={fy.toString()}>
+                          {getFiscalYearLabel(fy)}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
           {/* Stats Cards */}
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
             <Card>
@@ -512,7 +596,7 @@ export default function TaxDashboard() {
               <CardContent>
                 <div className="text-2xl font-bold text-emerald-600">{formatCurrency(totalIncome)}</div>
                 <p className="text-xs text-muted-foreground mt-1">
-                  {transactions.filter(t => t.amount > 0).length} transactions
+                  {filteredTransactions.filter(t => t.amount > 0).length} transactions
                 </p>
               </CardContent>
             </Card>
@@ -525,7 +609,7 @@ export default function TaxDashboard() {
               <CardContent>
                 <div className="text-2xl font-bold text-red-600">{formatCurrency(totalExpenses)}</div>
                 <p className="text-xs text-muted-foreground mt-1">
-                  {transactions.filter(t => t.amount < 0).length} transactions
+                  {filteredTransactions.filter(t => t.amount < 0).length} transactions
                 </p>
               </CardContent>
             </Card>

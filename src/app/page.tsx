@@ -1295,74 +1295,297 @@ export default function TaxDashboard() {
 
         {/* Deadlines Tab */}
         <TabsContent value="deadlines" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Calendrier Fiscal {new Date().getFullYear()}</CardTitle>
-              <CardDescription>Toutes vos échéances fiscales pour votre SASU</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-6">
-                {['IS', 'TVA', 'CFE', 'LIASSE', 'DAS2'].map((type) => {
-                  const typeDeadlines = deadlines.filter(d => d.type === type)
-                  if (typeDeadlines.length === 0) return null
-                  
-                  const typeNames: Record<string, string> = {
-                    IS: 'Impôt sur les Sociétés',
-                    TVA: 'TVA',
-                    CFE: 'Cotisation Foncière des Entreprises',
-                    LIASSE: 'Liasse Fiscale',
-                    DAS2: 'Déclaration DAS2',
-                  }
-                  
-                  return (
-                    <div key={type} className="space-y-3">
-                      <h3 className="font-semibold text-lg flex items-center gap-2">
-                        <Badge variant="outline">{type}</Badge>
-                        {typeNames[type]}
-                      </h3>
-                      <div className="rounded-md border">
-                        <Table>
-                          <TableHeader>
-                            <TableRow>
-                              <TableHead>Échéance</TableHead>
-                              <TableHead>Date</TableHead>
-                              <TableHead>Statut</TableHead>
-                              <TableHead>Jours restants</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {typeDeadlines.map((d) => {
-                              const days = getDaysUntil(d.dueDate)
-                              return (
-                                <TableRow key={d.id}>
-                                  <TableCell className="font-medium">{d.name}</TableCell>
-                                  <TableCell className="font-mono">{formatDate(d.dueDate)}</TableCell>
-                                  <TableCell>
-                                    <Badge variant={d.status === 'done' ? 'default' : 'secondary'}>
-                                      {d.status === 'done' ? (
-                                        <><CheckCircle className="h-3 w-3 mr-1" /> Effectué</>
-                                      ) : (
-                                        <><Clock className="h-3 w-3 mr-1" /> En attente</>
-                                      )}
-                                    </Badge>
-                                  </TableCell>
-                                  <TableCell>
-                                    <span className={days <= 7 ? 'text-red-600 font-medium' : days <= 30 ? 'text-amber-600' : ''}>
-                                      {days < 0 ? `${Math.abs(days)} jours de retard` : days === 0 ? "Aujourd'hui" : `${days} jours`}
-                                    </span>
-                                  </TableCell>
-                                </TableRow>
-                              )
-                            })}
-                          </TableBody>
-                        </Table>
-                      </div>
-                    </div>
-                  )
-                })}
+          {/* Header Card */}
+          <Card className="bg-gradient-to-r from-indigo-50 via-purple-50 to-blue-50 border-indigo-200">
+            <CardContent className="py-4">
+              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                <div>
+                  <h2 className="text-xl font-bold text-indigo-900">Calendrier Fiscal {new Date().getFullYear()}</h2>
+                  <p className="text-sm text-indigo-700">Toutes vos échéances fiscales pour votre SASU</p>
+                </div>
               </div>
             </CardContent>
           </Card>
+
+          {/* IS Section - Blue Theme */}
+          {deadlines.filter(d => d.type === 'IS').length > 0 && (
+            <Card className="border-l-4 border-l-blue-500 shadow-sm">
+              <CardHeader className="bg-gradient-to-r from-blue-50 to-blue-100/50 rounded-t-lg">
+                <CardTitle className="flex items-center gap-3 text-blue-800">
+                  <div className="p-2 bg-blue-500 rounded-lg">
+                    <PiggyBank className="h-5 w-5 text-white" />
+                  </div>
+                  <div>
+                    <span>IS</span>
+                    <span className="text-sm font-normal text-blue-600 block">Impôt sur les Sociétés</span>
+                  </div>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="pt-4">
+                <div className="rounded-md border border-blue-200 overflow-hidden">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="bg-blue-50/50">
+                        <TableHead className="text-blue-700">Échéance</TableHead>
+                        <TableHead className="text-blue-700">Date</TableHead>
+                        <TableHead className="text-blue-700">Statut</TableHead>
+                        <TableHead className="text-blue-700">Jours restants</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {deadlines.filter(d => d.type === 'IS').map((d) => {
+                        const days = getDaysUntil(d.dueDate)
+                        return (
+                          <TableRow key={d.id} className="hover:bg-blue-50/30">
+                            <TableCell className="font-medium">{d.name}</TableCell>
+                            <TableCell className="font-mono">{formatDate(d.dueDate)}</TableCell>
+                            <TableCell>
+                              <Badge variant={d.status === 'done' ? 'default' : 'secondary'} className={d.status === 'done' ? 'bg-blue-500' : ''}>
+                                {d.status === 'done' ? (
+                                  <><CheckCircle className="h-3 w-3 mr-1" /> Effectué</>
+                                ) : (
+                                  <><Clock className="h-3 w-3 mr-1" /> En attente</>
+                                )}
+                              </Badge>
+                            </TableCell>
+                            <TableCell>
+                              <span className={`px-2 py-1 rounded-full text-sm ${days < 0 ? 'bg-red-100 text-red-700 font-medium' : days <= 7 ? 'bg-red-100 text-red-700 font-medium' : days <= 30 ? 'bg-amber-100 text-amber-700' : 'bg-blue-100 text-blue-700'}`}>
+                                {days < 0 ? `${Math.abs(days)} jours de retard` : days === 0 ? "Aujourd'hui" : `${days} jours`}
+                              </span>
+                            </TableCell>
+                          </TableRow>
+                        )
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* TVA Section - Amber/Orange Theme */}
+          {deadlines.filter(d => d.type === 'TVA').length > 0 && (
+            <Card className="border-l-4 border-l-amber-500 shadow-sm">
+              <CardHeader className="bg-gradient-to-r from-amber-50 to-orange-100/50 rounded-t-lg">
+                <CardTitle className="flex items-center gap-3 text-amber-800">
+                  <div className="p-2 bg-amber-500 rounded-lg">
+                    <Percent className="h-5 w-5 text-white" />
+                  </div>
+                  <div>
+                    <span>TVA</span>
+                    <span className="text-sm font-normal text-amber-600 block">Taxe sur la Valeur Ajoutée</span>
+                  </div>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="pt-4">
+                <div className="rounded-md border border-amber-200 overflow-hidden">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="bg-amber-50/50">
+                        <TableHead className="text-amber-700">Échéance</TableHead>
+                        <TableHead className="text-amber-700">Date</TableHead>
+                        <TableHead className="text-amber-700">Statut</TableHead>
+                        <TableHead className="text-amber-700">Jours restants</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {deadlines.filter(d => d.type === 'TVA').map((d) => {
+                        const days = getDaysUntil(d.dueDate)
+                        return (
+                          <TableRow key={d.id} className="hover:bg-amber-50/30">
+                            <TableCell className="font-medium">{d.name}</TableCell>
+                            <TableCell className="font-mono">{formatDate(d.dueDate)}</TableCell>
+                            <TableCell>
+                              <Badge variant={d.status === 'done' ? 'default' : 'secondary'} className={d.status === 'done' ? 'bg-amber-500' : ''}>
+                                {d.status === 'done' ? (
+                                  <><CheckCircle className="h-3 w-3 mr-1" /> Effectué</>
+                                ) : (
+                                  <><Clock className="h-3 w-3 mr-1" /> En attente</>
+                                )}
+                              </Badge>
+                            </TableCell>
+                            <TableCell>
+                              <span className={`px-2 py-1 rounded-full text-sm ${days < 0 ? 'bg-red-100 text-red-700 font-medium' : days <= 7 ? 'bg-red-100 text-red-700 font-medium' : days <= 30 ? 'bg-amber-100 text-amber-700' : 'bg-amber-100 text-amber-700'}`}>
+                                {days < 0 ? `${Math.abs(days)} jours de retard` : days === 0 ? "Aujourd'hui" : `${days} jours`}
+                              </span>
+                            </TableCell>
+                          </TableRow>
+                        )
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* LIASSE Section - Purple Theme */}
+          {deadlines.filter(d => d.type === 'LIASSE').length > 0 && (
+            <Card className="border-l-4 border-l-purple-500 shadow-sm">
+              <CardHeader className="bg-gradient-to-r from-purple-50 to-violet-100/50 rounded-t-lg">
+                <CardTitle className="flex items-center gap-3 text-purple-800">
+                  <div className="p-2 bg-purple-500 rounded-lg">
+                    <FileText className="h-5 w-5 text-white" />
+                  </div>
+                  <div>
+                    <span>LIASSE</span>
+                    <span className="text-sm font-normal text-purple-600 block">Liasse Fiscale</span>
+                  </div>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="pt-4">
+                <div className="rounded-md border border-purple-200 overflow-hidden">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="bg-purple-50/50">
+                        <TableHead className="text-purple-700">Échéance</TableHead>
+                        <TableHead className="text-purple-700">Date</TableHead>
+                        <TableHead className="text-purple-700">Statut</TableHead>
+                        <TableHead className="text-purple-700">Jours restants</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {deadlines.filter(d => d.type === 'LIASSE').map((d) => {
+                        const days = getDaysUntil(d.dueDate)
+                        return (
+                          <TableRow key={d.id} className="hover:bg-purple-50/30">
+                            <TableCell className="font-medium">{d.name}</TableCell>
+                            <TableCell className="font-mono">{formatDate(d.dueDate)}</TableCell>
+                            <TableCell>
+                              <Badge variant={d.status === 'done' ? 'default' : 'secondary'} className={d.status === 'done' ? 'bg-purple-500' : ''}>
+                                {d.status === 'done' ? (
+                                  <><CheckCircle className="h-3 w-3 mr-1" /> Effectué</>
+                                ) : (
+                                  <><Clock className="h-3 w-3 mr-1" /> En attente</>
+                                )}
+                              </Badge>
+                            </TableCell>
+                            <TableCell>
+                              <span className={`px-2 py-1 rounded-full text-sm ${days < 0 ? 'bg-red-100 text-red-700 font-medium' : days <= 7 ? 'bg-red-100 text-red-700 font-medium' : days <= 30 ? 'bg-amber-100 text-amber-700' : 'bg-purple-100 text-purple-700'}`}>
+                                {days < 0 ? `${Math.abs(days)} jours de retard` : days === 0 ? "Aujourd'hui" : `${days} jours`}
+                              </span>
+                            </TableCell>
+                          </TableRow>
+                        )
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* CFE Section - Green Theme */}
+          {deadlines.filter(d => d.type === 'CFE').length > 0 && (
+            <Card className="border-l-4 border-l-emerald-500 shadow-sm">
+              <CardHeader className="bg-gradient-to-r from-emerald-50 to-green-100/50 rounded-t-lg">
+                <CardTitle className="flex items-center gap-3 text-emerald-800">
+                  <div className="p-2 bg-emerald-500 rounded-lg">
+                    <Building2 className="h-5 w-5 text-white" />
+                  </div>
+                  <div>
+                    <span>CFE</span>
+                    <span className="text-sm font-normal text-emerald-600 block">Cotisation Foncière des Entreprises</span>
+                  </div>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="pt-4">
+                <div className="rounded-md border border-emerald-200 overflow-hidden">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="bg-emerald-50/50">
+                        <TableHead className="text-emerald-700">Échéance</TableHead>
+                        <TableHead className="text-emerald-700">Date</TableHead>
+                        <TableHead className="text-emerald-700">Statut</TableHead>
+                        <TableHead className="text-emerald-700">Jours restants</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {deadlines.filter(d => d.type === 'CFE').map((d) => {
+                        const days = getDaysUntil(d.dueDate)
+                        return (
+                          <TableRow key={d.id} className="hover:bg-emerald-50/30">
+                            <TableCell className="font-medium">{d.name}</TableCell>
+                            <TableCell className="font-mono">{formatDate(d.dueDate)}</TableCell>
+                            <TableCell>
+                              <Badge variant={d.status === 'done' ? 'default' : 'secondary'} className={d.status === 'done' ? 'bg-emerald-500' : ''}>
+                                {d.status === 'done' ? (
+                                  <><CheckCircle className="h-3 w-3 mr-1" /> Effectué</>
+                                ) : (
+                                  <><Clock className="h-3 w-3 mr-1" /> En attente</>
+                                )}
+                              </Badge>
+                            </TableCell>
+                            <TableCell>
+                              <span className={`px-2 py-1 rounded-full text-sm ${days < 0 ? 'bg-red-100 text-red-700 font-medium' : days <= 7 ? 'bg-red-100 text-red-700 font-medium' : days <= 30 ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                                {days < 0 ? `${Math.abs(days)} jours de retard` : days === 0 ? "Aujourd'hui" : `${days} jours`}
+                              </span>
+                            </TableCell>
+                          </TableRow>
+                        )
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* DAS2 Section - Teal Theme */}
+          {deadlines.filter(d => d.type === 'DAS2').length > 0 && (
+            <Card className="border-l-4 border-l-teal-500 shadow-sm">
+              <CardHeader className="bg-gradient-to-r from-teal-50 to-cyan-100/50 rounded-t-lg">
+                <CardTitle className="flex items-center gap-3 text-teal-800">
+                  <div className="p-2 bg-teal-500 rounded-lg">
+                    <Receipt className="h-5 w-5 text-white" />
+                  </div>
+                  <div>
+                    <span>DAS2</span>
+                    <span className="text-sm font-normal text-teal-600 block">Déclaration DAS2</span>
+                  </div>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="pt-4">
+                <div className="rounded-md border border-teal-200 overflow-hidden">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="bg-teal-50/50">
+                        <TableHead className="text-teal-700">Échéance</TableHead>
+                        <TableHead className="text-teal-700">Date</TableHead>
+                        <TableHead className="text-teal-700">Statut</TableHead>
+                        <TableHead className="text-teal-700">Jours restants</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {deadlines.filter(d => d.type === 'DAS2').map((d) => {
+                        const days = getDaysUntil(d.dueDate)
+                        return (
+                          <TableRow key={d.id} className="hover:bg-teal-50/30">
+                            <TableCell className="font-medium">{d.name}</TableCell>
+                            <TableCell className="font-mono">{formatDate(d.dueDate)}</TableCell>
+                            <TableCell>
+                              <Badge variant={d.status === 'done' ? 'default' : 'secondary'} className={d.status === 'done' ? 'bg-teal-500' : ''}>
+                                {d.status === 'done' ? (
+                                  <><CheckCircle className="h-3 w-3 mr-1" /> Effectué</>
+                                ) : (
+                                  <><Clock className="h-3 w-3 mr-1" /> En attente</>
+                                )}
+                              </Badge>
+                            </TableCell>
+                            <TableCell>
+                              <span className={`px-2 py-1 rounded-full text-sm ${days < 0 ? 'bg-red-100 text-red-700 font-medium' : days <= 7 ? 'bg-red-100 text-red-700 font-medium' : days <= 30 ? 'bg-amber-100 text-amber-700' : 'bg-teal-100 text-teal-700'}`}>
+                                {days < 0 ? `${Math.abs(days)} jours de retard` : days === 0 ? "Aujourd'hui" : `${days} jours`}
+                              </span>
+                            </TableCell>
+                          </TableRow>
+                        )
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
 
         {/* Invoices Tab */}

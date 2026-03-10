@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { prisma } from '@/lib/db'
+import { db } from '@/lib/db'
 
 // GET - Fetch all declarations
 export async function GET(request: NextRequest) {
   try {
-    const declarations = await prisma.declaration.findMany({
+    const declarations = await db.declaration.findMany({
       orderBy: [
         { year: 'desc' },
         { createdAt: 'desc' }
@@ -40,7 +40,7 @@ export async function POST(request: NextRequest) {
       }
     }
     
-    const declaration = await prisma.declaration.create({
+    const declaration = await db.declaration.create({
       data: {
         type,
         year,
@@ -64,7 +64,7 @@ export async function PUT(request: NextRequest) {
     const body = await request.json()
     const { id, status, filedAt, documentUrl } = body
     
-    const declaration = await prisma.declaration.update({
+    const declaration = await db.declaration.update({
       where: { id },
       data: {
         status: status || undefined,

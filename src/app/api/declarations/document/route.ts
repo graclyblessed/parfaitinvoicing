@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { prisma } from '@/lib/db'
+import { db } from '@/lib/db'
 import { writeFile, mkdir } from 'fs/promises'
 import { existsSync } from 'fs'
 import path from 'path'
@@ -34,7 +34,7 @@ export async function POST(request: NextRequest) {
     
     // Update declaration with document URL
     const documentUrl = `/uploads/declarations/${filename}`
-    const declaration = await prisma.declaration.update({
+    const declaration = await db.declaration.update({
       where: { id: declarationId },
       data: { 
         documentUrl,

@@ -171,12 +171,29 @@ export default function TaxDashboard() {
         body: formData,
       })
       const data = await res.json()
+      
       if (data.success) {
-        alert(`Importé ${data.imported} transactions. ${data.skipped} ignorées.`)
+        const message = `Importé ${data.imported} transactions. ${data.skipped} ignorées.`
+        if (data.parseErrors && data.parseErrors.length > 0) {
+          console.log('Parse errors:', data.parseErrors)
+        }
+        alert(message)
         fetchAllData()
+      } else {
+        // Show detailed error message
+        let errorMsg = data.error || 'Erreur inconnue'
+        if (data.details) {
+          errorMsg += `\n\nDétails: ${data.details}`
+        }
+        if (data.parseErrors && data.parseErrors.length > 0) {
+          errorMsg += `\n\nErreurs de parsing:\n${data.parseErrors.slice(0, 5).join('\n')}`
+        }
+        alert(errorMsg)
+        console.error('Upload failed:', data)
       }
     } catch (error) {
       console.error('Upload error:', error)
+      alert('Erreur de connexion au serveur')
     } finally {
       setUploading(false)
       setSelectedFile(null)

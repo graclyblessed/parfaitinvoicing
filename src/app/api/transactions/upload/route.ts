@@ -8,12 +8,32 @@ export async function POST(request: NextRequest) {
     const file = formData.get('file') as File
     const bankName = formData.get('bankName') as string || 'default'
     
+    console.log('Upload request received:', { 
+      fileName: file?.name, 
+      fileSize: file?.size, 
+      bankName 
+    })
+    
     if (!file) {
       return NextResponse.json({ error: 'No file provided' }, { status: 400 })
     }
     
     const text = await file.text()
+    console.log('CSV content length:', text.length)
+    console.log('CSV first 500 chars:', text.substring(0, 500))
+    
     const lines = text.split('\n').filter(line => line.trim())
+    console.log('Number of lines:', lines.length)
+    
+    if (lines.length < 2) {
+      return NextResponse.json({ 
+        error: 'File appears to be empty or has no data rows',
+        linesFound: lines.length 
+      }, { status: 400 })
+    }
+    
+    // Log header row for debugging
+    console.log('Header row:', lines[0])
     
     // Skip header row and process data
     const transactions: Array<{
@@ -27,6 +47,7 @@ export async function POST(request: NextRequest) {
       rawCsvData: string
     }> = []
     let skipped = 0
+    const parseErrors: string[] = []
     
     for (let i = 1; i < lines.length; i++) {
       const line = lines[i].trim()
@@ -35,8 +56,9 @@ export async function POST(request: NextRequest) {
       // Try to parse CSV line - handle different formats
       const parts = parseCSVLine(line)
       
-      if (parts.length < 3) {
+      if (parts.length < 2) {
         skipped++
+        parseErrors.push(`Line ${i + 1}: Not enough columns (${parts.length})`)
         continue
       }
       
@@ -44,16 +66,39 @@ export async function POST(request: NextRequest) {
       const parsed = parseTransaction(parts, bankName)
       
       if (parsed) {
-        // Check for duplicates
-        const existing = await db.transaction.findFirst({
-          where: {
-            date: parsed.date,
-            amount: parsed.amount,
-            description: parsed.description,
-          },
+        console.log(`Line ${i + 1} parsed:`, { 
+          date: parsed.date, 
+          amount: parsed.amount, 
+          description: parsed.description.substring(0, 50) 
         })
         
-        if (!existing) {
+        // Check for duplicates
+        try {
+          const existing = await db.transaction.findFirst({
+            where: {
+              date: parsed.date,
+              amount: parsed.amount,
+              description: parsed.description,
+            },
+          })
+          
+          if (!existing) {
+            transactions.push({
+              date: parsed.date,
+              amount: parsed.amount,
+              description: parsed.description,
+              reference: parsed.reference || null,
+              type: parsed.amount >= 0 ? 'income' : 'expense',
+              labeled: false,
+              bankAccount: bankName,
+              rawCsvData: line,
+            })
+          } else {
+            skipped++
+          }
+        } catch (dbError) {
+          console.error('Database check error:', dbError)
+          // Still add the transaction even if check fails
           transactions.push({
             date: parsed.date,
             amount: parsed.amount,
@@ -64,19 +109,30 @@ export async function POST(request: NextRequest) {
             bankAccount: bankName,
             rawCsvData: line,
           })
-        } else {
-          skipped++
         }
       } else {
         skipped++
+        parseErrors.push(`Line ${i + 1}: Could not parse - ${parts.join(' | ')}`)
       }
     }
     
+    console.log(`Parsed ${transactions.length} transactions, skipped ${skipped}`)
+    
     // Insert all new transactions
     if (transactions.length > 0) {
-      await db.transaction.createMany({
-        data: transactions,
-      })
+      try {
+        await db.transaction.createMany({
+          data: transactions,
+        })
+        console.log(`Successfully inserted ${transactions.length} transactions`)
+      } catch (insertError) {
+        console.error('Insert error:', insertError)
+        return NextResponse.json({ 
+          error: 'Failed to insert transactions',
+          details: String(insertError),
+          parsedCount: transactions.length
+        }, { status: 500 })
+      }
     }
     
     return NextResponse.json({
@@ -84,10 +140,14 @@ export async function POST(request: NextRequest) {
       imported: transactions.length,
       skipped,
       total: lines.length - 1,
+      parseErrors: parseErrors.slice(0, 10), // Return first 10 errors for debugging
     })
   } catch (error) {
     console.error('Error uploading CSV:', error)
-    return NextResponse.json({ error: 'Failed to process CSV file' }, { status: 500 })
+    return NextResponse.json({ 
+      error: 'Failed to process CSV file',
+      details: error instanceof Error ? error.message : String(error)
+    }, { status: 500 })
   }
 }
 
@@ -126,31 +186,175 @@ function parseTransaction(parts: string[], bankName: string): {
     return parseBlankTransaction(parts)
   }
   
-  // Try different date formats
+  // Generic parser for other banks
+  return parseGenericTransaction(parts)
+}
+
+// Parse Blank.app CSV format
+// Expected formats:
+// 1. Date;Description;Amount;Balance
+// 2. Date;Description;Debit;Credit;Balance
+// 3. Date;Label;Amount
+function parseBlankTransaction(parts: string[]): {
+  date: Date
+  amount: number
+  description: string
+  reference?: string
+} | null {
+  if (parts.length < 2) return null
+  
+  // Date patterns - support multiple formats
   const datePatterns = [
-    /^(\d{2})\/(\d{2})\/(\d{4})$/, // DD/MM/YYYY
-    /^(\d{4})-(\d{2})-(\d{2})$/, // YYYY-MM-DD
-    /^(\d{2})-(\d{2})-(\d{4})$/, // DD-MM-YYYY
+    { regex: /^(\d{2})\/(\d{2})\/(\d{4})$/, type: 'ddmmyyyy' },
+    { regex: /^(\d{4})-(\d{2})-(\d{2})$/, type: 'yyyymmdd' },
+    { regex: /^(\d{2})-(\d{2})-(\d{4})$/, type: 'ddmmyyyy' },
+    { regex: /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/, type: 'ddmmyyyy' },
   ]
   
   let date: Date | null = null
+  let dateIndex = -1
   let amount: number | null = null
+  let amountIndex = -1
   let description = ''
-  let reference = ''
   
-  for (const part of parts) {
-    // Try to parse date
+  // Find date column
+  for (let i = 0; i < parts.length; i++) {
+    const part = parts[i].trim()
+    
     for (const pattern of datePatterns) {
-      const match = part.match(pattern)
-      if (match && !date) {
-        if (pattern === datePatterns[0] || pattern === datePatterns[2]) {
-          // DD/MM/YYYY or DD-MM-YYYY
+      const match = part.match(pattern.regex)
+      if (match) {
+        if (pattern.type === 'ddmmyyyy') {
           const day = parseInt(match[1])
           const month = parseInt(match[2])
           const year = parseInt(match[3])
           date = new Date(year, month - 1, day)
         } else {
-          // YYYY-MM-DD
+          const year = parseInt(match[1])
+          const month = parseInt(match[2])
+          const day = parseInt(match[3])
+          date = new Date(year, month - 1, day)
+        }
+        dateIndex = i
+        break
+      }
+    }
+    if (dateIndex >= 0) break
+  }
+  
+  if (!date || dateIndex < 0) {
+    console.log('No date found in parts:', parts)
+    return null
+  }
+  
+  // Find amount column - look for numeric values
+  // Try to find debit/credit columns or single amount column
+  let debit: number | null = null
+  let credit: number | null = null
+  
+  for (let i = 0; i < parts.length; i++) {
+    if (i === dateIndex) continue
+    
+    const part = parts[i].trim()
+    
+    // Skip empty parts
+    if (!part) continue
+    
+    // Try to parse as number (handle French format with comma for decimals)
+    const cleanPart = part
+      .replace(/\s/g, '')
+      .replace(',', '.')
+      .replace(/[^0-9.\-]/g, '')
+    
+    if (cleanPart && /^-?\d+\.?\d*$/.test(cleanPart)) {
+      const num = parseFloat(cleanPart)
+      if (!isNaN(num)) {
+        // Check if this might be a balance (usually the last number)
+        // or an amount
+        if (amountIndex < 0) {
+          amount = num
+          amountIndex = i
+        }
+      }
+    }
+  }
+  
+  // If no amount found, check for separate debit/credit columns
+  if (amount === null) {
+    // Look for two numeric columns after date (debit + credit pattern)
+    const numericParts: { index: number; value: number }[] = []
+    for (let i = 0; i < parts.length; i++) {
+      if (i === dateIndex) continue
+      const cleanPart = parts[i].trim().replace(/\s/g, '').replace(',', '.')
+      if (/^\d+\.?\d*$/.test(cleanPart)) {
+        numericParts.push({ index: i, value: parseFloat(cleanPart) })
+      }
+    }
+    
+    if (numericParts.length >= 2) {
+      // Assume first is debit, second is credit
+      debit = numericParts[0].value
+      credit = numericParts[1].value
+      amount = credit - debit // Credit is positive, debit is negative
+    }
+  }
+  
+  if (amount === null) {
+    console.log('No amount found in parts:', parts)
+    return null
+  }
+  
+  // Find description (non-date, non-amount text column)
+  for (let i = 0; i < parts.length; i++) {
+    if (i === dateIndex || i === amountIndex) continue
+    
+    const part = parts[i].trim()
+    if (part && !/^-?\d/.test(part.replace(/\s/g, '').replace(',', '.'))) {
+      description = part
+      break
+    }
+  }
+  
+  if (!description) {
+    description = 'Transaction Blank'
+  }
+  
+  return {
+    date,
+    amount,
+    description,
+  }
+}
+
+// Generic parser for other banks
+function parseGenericTransaction(parts: string[]): {
+  date: Date
+  amount: number
+  description: string
+  reference?: string
+} | null {
+  // Date patterns
+  const datePatterns = [
+    { regex: /^(\d{2})\/(\d{2})\/(\d{4})$/, type: 'ddmmyyyy' },
+    { regex: /^(\d{4})-(\d{2})-(\d{2})$/, type: 'yyyymmdd' },
+    { regex: /^(\d{2})-(\d{2})-(\d{4})$/, type: 'ddmmyyyy' },
+  ]
+  
+  let date: Date | null = null
+  let amount: number | null = null
+  let description = ''
+  
+  for (const part of parts) {
+    // Try to parse date
+    for (const pattern of datePatterns) {
+      const match = part.match(pattern.regex)
+      if (match && !date) {
+        if (pattern.type === 'ddmmyyyy') {
+          const day = parseInt(match[1])
+          const month = parseInt(match[2])
+          const year = parseInt(match[3])
+          date = new Date(year, month - 1, day)
+        } else {
           const year = parseInt(match[1])
           const month = parseInt(match[2])
           const day = parseInt(match[3])
@@ -172,7 +376,7 @@ function parseTransaction(parts: string[], bankName: string): {
     }
     
     // Treat as description if not date or amount
-    const isDate = datePatterns.some(p => part.match(p))
+    const isDate = datePatterns.some(p => p.regex.test(part))
     const cleanAmount = part.replace(/\s/g, '').replace(',', '.')
     const isAmount = cleanAmount.match(/^-?\d+\.?\d*$/)
     
@@ -193,107 +397,5 @@ function parseTransaction(parts: string[], bankName: string): {
     date,
     amount: amount!,
     description: description || 'Transaction sans description',
-    reference: reference || undefined,
-  }
-}
-
-// Parse Blank.app CSV format
-// Expected format: Date;Description;Amount;Balance (or similar)
-function parseBlankTransaction(parts: string[]): {
-  date: Date
-  amount: number
-  description: string
-  reference?: string
-} | null {
-  // Blank.app typically uses semicolon separator
-  // Format variations:
-  // 1. Date;Description;Amount;Balance
-  // 2. Date;Description;Debit;Credit;Balance
-  // 3. Date;Label;Amount
-  
-  if (parts.length < 3) return null
-  
-  // Try to parse date from first column
-  let dateIndex = -1
-  let amountIndex = -1
-  let descriptionIndex = -1
-  
-  // Date patterns
-  const datePatterns = [
-    /^(\d{2})\/(\d{2})\/(\d{4})$/, // DD/MM/YYYY
-    /^(\d{4})-(\d{2})-(\d{2})$/, // YYYY-MM-DD
-    /^(\d{2})-(\d{2})-(\d{4})$/, // DD-MM-YYYY
-  ]
-  
-  for (let i = 0; i < Math.min(parts.length, 5); i++) {
-    const part = parts[i].trim()
-    
-    // Check for date
-    for (const pattern of datePatterns) {
-      if (pattern.test(part)) {
-        dateIndex = i
-        break
-      }
-    }
-    
-    // Check for amount (French or English format)
-    const cleanPart = part.replace(/\s/g, '').replace(',', '.')
-    if (/^-?\d+\.?\d*$/.test(cleanPart) && amountIndex === -1 && i !== dateIndex) {
-      const num = parseFloat(cleanPart)
-      if (!isNaN(num) && num !== 0) {
-        amountIndex = i
-      }
-    }
-  }
-  
-  if (dateIndex === -1 || amountIndex === -1) {
-    return null
-  }
-  
-  // Find description (usually between date and amount)
-  for (let i = 0; i < parts.length; i++) {
-    if (i !== dateIndex && i !== amountIndex) {
-      const part = parts[i].trim()
-      if (part && !/^-?\d/.test(part.replace(/\s/g, ''))) {
-        descriptionIndex = i
-        break
-      }
-    }
-  }
-  
-  // Parse date
-  const dateStr = parts[dateIndex].trim()
-  let date: Date | null = null
-  
-  for (const pattern of datePatterns) {
-    const match = dateStr.match(pattern)
-    if (match) {
-      if (pattern === datePatterns[0] || pattern === datePatterns[2]) {
-        // DD/MM/YYYY or DD-MM-YYYY
-        date = new Date(parseInt(match[3]), parseInt(match[2]) - 1, parseInt(match[1]))
-      } else {
-        // YYYY-MM-DD
-        date = new Date(parseInt(match[1]), parseInt(match[2]) - 1, parseInt(match[3]))
-      }
-      break
-    }
-  }
-  
-  if (!date) return null
-  
-  // Parse amount
-  const amountStr = parts[amountIndex].replace(/\s/g, '').replace(',', '.')
-  const amount = parseFloat(amountStr)
-  if (isNaN(amount)) return null
-  
-  // Get description
-  const description = descriptionIndex >= 0 
-    ? parts[descriptionIndex].trim() 
-    : 'Transaction Blank'
-  
-  return {
-    date,
-    amount,
-    description: description || 'Transaction Blank',
   }
 }

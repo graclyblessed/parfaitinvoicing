@@ -1641,6 +1641,66 @@ export default function TaxDashboard() {
               </form>
             </CardContent>
           </Card>
+
+          {/* Category Management */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Gestion des catégories</CardTitle>
+              <CardDescription>Supprimez les catégories inutilisées</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {categories.filter(c => c.type === 'expense').map((cat) => {
+                  const usageCount = transactions.filter(t => t.categoryId === cat.id).length
+                  return (
+                    <div key={cat.id} className="flex items-center justify-between p-3 border rounded-lg">
+                      <div className="flex items-center gap-3">
+                        <div className="h-3 w-3 rounded-full" style={{ backgroundColor: cat.color }} />
+                        <div>
+                          <p className="font-medium">{cat.name}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {usageCount} transaction{usageCount !== 1 ? 's' : ''}
+                          </p>
+                        </div>
+                      </div>
+                      {usageCount === 0 && !cat.taxDeductible && (
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                          onClick={async () => {
+                            if (!confirm(`Supprimer la catégorie "${cat.name}" ?`)) return
+                            try {
+                              const res = await fetch('/api/categories/delete-unused', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ name: cat.name })
+                              })
+                              const data = await res.json()
+                              if (data.success) {
+                                alert(`Catégorie "${cat.name}" supprimée`)
+                                fetchAllData()
+                              } else {
+                                alert(data.error || 'Erreur')
+                              }
+                            } catch (error) {
+                              console.error('Error:', error)
+                            }
+                          }}
+                        >
+                          <X className="h-4 w-4 mr-1" />
+                          Supprimer
+                        </Button>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+              <p className="text-xs text-muted-foreground mt-4">
+                💡 Seules les catégories inutilisées et non déductibles peuvent être supprimées
+              </p>
+            </CardContent>
+          </Card>
         </TabsContent>
       </Tabs>
 

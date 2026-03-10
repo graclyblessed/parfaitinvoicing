@@ -67,8 +67,8 @@ model VerificationToken {
 // User settings for company info
 model Settings {
   id              String   @id @default(cuid())
-  userId          String   @unique
-  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId          String?  @unique
+  user            User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
   companyName     String
   companyAddress  String
   companySIRET    String

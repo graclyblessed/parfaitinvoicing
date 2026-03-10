@@ -20,6 +20,7 @@ import {
   ArrowUpRight, ArrowDownRight, Minus, Paperclip, X, Eye
 } from 'lucide-react'
 import { LiasseFiscaleSection } from '@/components/liasse-fiscale-section'
+import { DeclarationsSection } from '@/components/declarations-section'
 
 // Types
 interface Transaction {
@@ -495,6 +496,7 @@ export default function TaxDashboard() {
           <TabsTrigger value="deadlines">Échéances</TabsTrigger>
           <TabsTrigger value="invoices">Factures</TabsTrigger>
           <TabsTrigger value="liasse">Liasse Fiscale</TabsTrigger>
+          <TabsTrigger value="declarations">Déclarations</TabsTrigger>
           <TabsTrigger value="settings">Paramètres</TabsTrigger>
         </TabsList>
 
@@ -1224,6 +1226,11 @@ export default function TaxDashboard() {
         {/* Liasse Fiscale Tab */}
         <TabsContent value="liasse" className="space-y-6">
           <LiasseFiscaleSection settings={settings} transactions={transactions} />
+        </TabsContent>
+
+        {/* Declarations Tab - TVA & IS */}
+        <TabsContent value="declarations" className="space-y-6">
+          <DeclarationsSection settings={settings} liasse={null} />
         </TabsContent>
 
         {/* Settings Tab */}

@@ -250,3 +250,21 @@ model CategoryRule {
   
   @@unique([pattern]) // One rule per pattern
 }
+
+// Tax declarations (IS, TVA)
+model Declaration {
+  id              String   @id @default(cuid())
+  type            String   // IS, TVA
+  year            Int
+  period          String   // FY2025, Q1-2025, CA12-2025
+  amount          Float    @default(0)
+  status          String   @default("pending") // pending, filed, paid
+  dueDate         DateTime
+  filedAt         DateTime?
+  documentUrl     String?  // Path to uploaded document
+  notes           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  @@unique([type, year, period])
+}

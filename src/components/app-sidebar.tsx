@@ -1,5 +1,6 @@
 'use client'
 
+import { Suspense } from 'react'
 import Link from 'next/link'
 import { usePathname, useSearchParams, useRouter } from 'next/navigation'
 import { signOut, useSession } from 'next-auth/react'
@@ -13,7 +14,7 @@ import {
   LogOut,
   Building2,
   ChevronUp,
-  ChevronDown,
+  Loader2,
 } from 'lucide-react'
 import {
   Sidebar,
@@ -27,9 +28,6 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarRail,
-  SidebarMenuSub,
-  SidebarMenuSubButton,
-  SidebarMenuSubItem,
 } from '@/components/ui/sidebar'
 import {
   DropdownMenu,
@@ -39,7 +37,6 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 
 const navigation = [
   {
@@ -59,8 +56,7 @@ const navigation = [
   },
 ]
 
-export function AppSidebar() {
-  const pathname = usePathname()
+function SidebarContentInner() {
   const searchParams = useSearchParams()
   const currentTab = searchParams.get('tab') || 'overview'
   const { data: session } = useSession()
@@ -71,7 +67,6 @@ export function AppSidebar() {
     router.push('/login')
   }
 
-  // Get user initials for avatar
   const userInitials = session?.user?.name
     ?.split(' ')
     .map((n) => n[0])
@@ -82,7 +77,7 @@ export function AppSidebar() {
   const userName = session?.user?.name || 'Utilisateur'
 
   return (
-    <Sidebar collapsible="icon">
+    <>
       <SidebarHeader>
         <SidebarMenu>
           <SidebarMenuItem>
@@ -176,6 +171,41 @@ export function AppSidebar() {
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarFooter>
+    </>
+  )
+}
+
+function SidebarFallback() {
+  return (
+    <>
+      <SidebarHeader>
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton size="lg">
+              <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+                <Building2 className="size-4" />
+              </div>
+              <div className="grid flex-1 text-left text-sm leading-tight">
+                <span className="truncate font-semibold">Parfait Invoicing</span>
+                <span className="truncate text-xs text-muted-foreground">Gestion SASU</span>
+              </div>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        </SidebarMenu>
+      </SidebarHeader>
+      <SidebarContent className="flex items-center justify-center">
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      </SidebarContent>
+    </>
+  )
+}
+
+export function AppSidebar() {
+  return (
+    <Sidebar collapsible="icon">
+      <Suspense fallback={<SidebarFallback />}>
+        <SidebarContentInner />
+      </Suspense>
       <SidebarRail />
     </Sidebar>
   )

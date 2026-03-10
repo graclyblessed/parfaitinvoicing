@@ -78,6 +78,10 @@ const CATEGORY_KEYWORDS: Record<string, { keywords: string[]; type: 'income' | '
     type: 'expense',
     keywords: ['dividende', 'distribution']
   },
+  'Retrait espèces': {
+    type: 'expense',
+    keywords: ['retrait', 'dab', 'distributeur', 'cash', 'espèce', 'guichet', 'withdrawal']
+  },
 }
 
 // Auto-categorize transactions

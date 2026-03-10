@@ -289,5 +289,7 @@ export const DEFAULT_CATEGORIES = [
   { name: 'Impôts et taxes', type: 'expense', color: '#F43F5E', icon: 'file-text', taxDeductible: false },
   { name: 'Rémunération', type: 'expense', color: '#71717A', icon: 'user-check', taxDeductible: true },
   { name: 'Dividendes', type: 'expense', color: '#71717A', icon: 'dollar-sign', taxDeductible: false },
+  { name: 'Dépenses diverses justifiées', type: 'expense', color: '#78716C', icon: 'receipt', taxDeductible: true },
+  { name: 'Retrait espèces', type: 'expense', color: '#A8A29E', icon: 'wallet', taxDeductible: false },
   { name: 'Non catégorisé', type: 'expense', color: '#94A3B8', icon: 'help-circle', taxDeductible: false },
 ]

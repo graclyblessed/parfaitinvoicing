@@ -65,6 +65,22 @@ export const authOptions: NextAuthOptions = {
       }
       return session
     },
+    async signIn({ user }) {
+      // For Google OAuth users, link existing settings if available
+      if (user.email && user.id) {
+        const existingSettings = await db.settings.findFirst({
+          where: { userId: null },
+        })
+        
+        if (existingSettings) {
+          await db.settings.update({
+            where: { id: existingSettings.id },
+            data: { userId: user.id },
+          })
+        }
+      }
+      return true
+    },
   },
   secret: process.env.NEXTAUTH_SECRET,
 }

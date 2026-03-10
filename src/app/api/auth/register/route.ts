@@ -44,17 +44,30 @@ export async function POST(request: NextRequest) {
       },
     })
 
-    // Create default settings for the user
-    await db.settings.create({
-      data: {
-        userId: user.id,
-        companyName: name || 'Ma SASU',
-        companyAddress: '',
-        companySIRET: '',
-        companySIREN: '',
-        email: email,
-      },
+    // Check if there's an existing settings record without a user (for migration)
+    const existingSettings = await db.settings.findFirst({
+      where: { userId: null },
     })
+
+    if (existingSettings) {
+      // Link existing settings to the new user
+      await db.settings.update({
+        where: { id: existingSettings.id },
+        data: { userId: user.id },
+      })
+    } else {
+      // Create default settings for the user
+      await db.settings.create({
+        data: {
+          userId: user.id,
+          companyName: name || 'Ma SASU',
+          companyAddress: '',
+          companySIRET: '',
+          companySIREN: '',
+          email: email,
+        },
+      })
+    }
 
     return NextResponse.json({
       success: true,

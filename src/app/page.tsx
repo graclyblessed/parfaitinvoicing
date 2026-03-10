@@ -17,7 +17,7 @@ import {
   AlertCircle, Calendar, Upload, FileText, Settings, TrendingUp, 
   TrendingDown, Euro, Clock, CheckCircle, Plus, Download,
   Bell, Building2, Loader2, Receipt, PiggyBank, CreditCard,
-  ArrowUpRight, ArrowDownRight, Minus
+  ArrowUpRight, ArrowDownRight, Minus, Paperclip, X, Eye
 } from 'lucide-react'
 import { LiasseFiscaleSection } from '@/components/liasse-fiscale-section'
 
@@ -31,6 +31,9 @@ interface Transaction {
   labeled: boolean
   categoryId: string | null
   category: { id: string; name: string; color: string } | null
+  receiptUrl: string | null
+  receiptName: string | null
+  notes: string | null
 }
 
 interface Category {
@@ -104,6 +107,8 @@ export default function TaxDashboard() {
   const [exporting, setExporting] = useState(false)
   const [selectedBank, setSelectedBank] = useState('blank') // Blank.app bank
   const [autoCategorizing, setAutoCategorizing] = useState(false)
+  const [uploadingReceiptFor, setUploadingReceiptFor] = useState<string | null>(null)
+  const [showReceiptModal, setShowReceiptModal] = useState<{ id: string; url: string; name: string } | null>(null)
 
   // Fetch initial data
   useEffect(() => {
@@ -234,6 +239,54 @@ export default function TaxDashboard() {
       alert('Erreur de connexion')
     } finally {
       setAutoCategorizing(false)
+    }
+  }
+
+  // Upload receipt for transaction
+  const uploadReceipt = async (transactionId: string, file: File) => {
+    setUploadingReceiptFor(transactionId)
+    try {
+      const formData = new FormData()
+      formData.append('transactionId', transactionId)
+      formData.append('file', file)
+      
+      const res = await fetch('/api/transactions/receipt', {
+        method: 'POST',
+        body: formData,
+      })
+      const data = await res.json()
+      
+      if (data.success) {
+        fetchAllData()
+      } else {
+        alert('Erreur: ' + (data.error || 'Erreur inconnue'))
+      }
+    } catch (error) {
+      console.error('Receipt upload error:', error)
+      alert('Erreur lors du téléchargement')
+    } finally {
+      setUploadingReceiptFor(null)
+    }
+  }
+
+  // Delete receipt
+  const deleteReceipt = async (transactionId: string) => {
+    if (!confirm('Supprimer ce justificatif ?')) return
+    
+    try {
+      const res = await fetch(`/api/transactions/receipt?transactionId=${transactionId}`, {
+        method: 'DELETE',
+      })
+      const data = await res.json()
+      
+      if (data.success) {
+        fetchAllData()
+        setShowReceiptModal(null)
+      } else {
+        alert('Erreur: ' + (data.error || 'Erreur inconnue'))
+      }
+    } catch (error) {
+      console.error('Receipt delete error:', error)
     }
   }
 
@@ -744,6 +797,7 @@ export default function TaxDashboard() {
                         <TableHead className="text-right">Montant</TableHead>
                         <TableHead>Catégorie</TableHead>
                         <TableHead>Type</TableHead>
+                        <TableHead>Justificatif</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -789,6 +843,52 @@ export default function TaxDashboard() {
                                 <SelectItem value="expense">Dépense</SelectItem>
                               </SelectContent>
                             </Select>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              {t.receiptUrl ? (
+                                <>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => setShowReceiptModal({ id: t.id, url: t.receiptUrl!, name: t.receiptName || 'Justificatif' })}
+                                    title="Voir le justificatif"
+                                  >
+                                    <Eye className="h-4 w-4 text-blue-600" />
+                                  </Button>
+                                  <span className="text-xs text-green-600">✓</span>
+                                </>
+                              ) : (
+                                <label className="cursor-pointer">
+                                  <input
+                                    type="file"
+                                    accept="image/*,.pdf"
+                                    className="hidden"
+                                    onChange={(e) => {
+                                      const file = e.target.files?.[0]
+                                      if (file) uploadReceipt(t.id, file)
+                                    }}
+                                    disabled={uploadingReceiptFor === t.id}
+                                  />
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    disabled={uploadingReceiptFor === t.id}
+                                    title="Ajouter un justificatif"
+                                    onClick={(e) => e.preventDefault()}
+                                    asChild
+                                  >
+                                    <span>
+                                      {uploadingReceiptFor === t.id ? (
+                                        <Loader2 className="h-4 w-4 animate-spin" />
+                                      ) : (
+                                        <Paperclip className="h-4 w-4 text-gray-400" />
+                                      )}
+                                    </span>
+                                  </Button>
+                                </label>
+                              )}
+                            </div>
                           </TableCell>
                         </TableRow>
                       ))}
@@ -1181,6 +1281,45 @@ export default function TaxDashboard() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Receipt View Modal */}
+      {showReceiptModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="flex items-center justify-between p-4 border-b">
+              <h3 className="font-semibold">{showReceiptModal.name}</h3>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={() => deleteReceipt(showReceiptModal.id)}
+                >
+                  <X className="h-4 w-4 mr-1" />
+                  Supprimer
+                </Button>
+                <Button variant="ghost" size="sm" onClick={() => setShowReceiptModal(null)}>
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+            <div className="p-4 overflow-auto flex-1">
+              {showReceiptModal.url.endsWith('.pdf') ? (
+                <iframe
+                  src={showReceiptModal.url}
+                  className="w-full h-[70vh]"
+                  title="Receipt PDF"
+                />
+              ) : (
+                <img
+                  src={showReceiptModal.url}
+                  alt="Receipt"
+                  className="max-w-full max-h-[70vh] mx-auto object-contain"
+                />
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

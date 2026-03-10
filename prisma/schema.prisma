@@ -56,6 +56,9 @@ model Transaction {
   labeled         Boolean  @default(false)
   bankAccount     String?
   rawCsvData      String?  // Original CSV row
+  receiptUrl      String?  // Path to uploaded receipt
+  receiptName     String?  // Original receipt filename
+  notes           String?  // User notes
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 }

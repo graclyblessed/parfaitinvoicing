@@ -24,17 +24,12 @@ interface Settings {
   vatRegime: string
 }
 
-interface LiasseData {
-  id: string
+interface FiscalYearData {
   year: number
-  status: string
-  chiffreAffaires: number
-  totalCharges: number
-  resultatCourant: number
-  impotSurSocietes: number
-  resultatNet: number
-  baseImposableIS: number
-  isAPayer: number
+  income: number
+  expenses: number
+  profit: number
+  isAmount: number
   tvaCollectee: number
   tvaDeductible: number
   tvaDue: number
@@ -72,42 +67,103 @@ function getTVACA12Date(fyEndYear: number): Date {
   return new Date(fyEndYear + 1, 4, 3) // May 3rd of following year
 }
 
+// Calculate IS based on profit
+function calculateIS(profit: number): number {
+  if (profit <= 0) return 0
+  if (profit <= 42500) {
+    return profit * 0.15
+  }
+  return (42500 * 0.15) + ((profit - 42500) * 0.25)
+}
+
 export function DeclarationsSection({ settings }: DeclarationsSectionProps) {
   const [declarations, setDeclarations] = useState<Declaration[]>([])
-  const [liasses, setLiasses] = useState<LiasseData[]>([])
+  const [fiscalYearData, setFiscalYearData] = useState<Record<number, FiscalYearData>>({})
   const [loading, setLoading] = useState(false)
   const [activeTab, setActiveTab] = useState('is')
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear())
   const [uploadingDoc, setUploadingDoc] = useState<string | null>(null)
   const [showDocModal, setShowDocModal] = useState<{ url: string; name: string } | null>(null)
 
-  // Get liasse for the selected fiscal year
-  const selectedLiasse = liasses.find(l => l.year === selectedYear)
-  // Get liasse for previous fiscal year (for IS acomptes calculation)
-  const previousLiasse = liasses.find(l => l.year === selectedYear - 1)
+  // Get data for selected fiscal year
+  const selectedFYData = fiscalYearData[selectedYear]
+  // Get data for previous fiscal year (for IS acomptes calculation)
+  const previousFYData = fiscalYearData[selectedYear - 1]
 
-  // Calculate IS acomptes based on previous year IS
-  const previousYearIS = previousLiasse?.isAPayer || 0
+  // IS acomptes based on previous year's IS
+  const previousYearIS = previousFYData?.isAmount || 0
   const acompteAmount = previousYearIS > 0 ? Math.round((previousYearIS / 4) * 100) / 100 : 0
 
-  // TVA info from selected year's liasse
+  // TVA info from selected year
   const isFranchiseEnBase = settings?.vatRegime === 'franchise'
-  const tvaCollectee = selectedLiasse?.tvaCollectee || 0
-  const tvaDeductible = selectedLiasse?.tvaDeductible || 0
-  const tvaDue = selectedLiasse?.tvaDue || 0
+  const tvaCollectee = selectedFYData?.tvaCollectee || 0
+  const tvaDeductible = selectedFYData?.tvaDeductible || 0
+  const tvaDue = selectedFYData?.tvaDue || 0
 
   useEffect(() => {
     fetchDeclarations()
-    fetchLiasses()
+    fetchFiscalYearData()
   }, [])
 
-  const fetchLiasses = async () => {
+  const fetchFiscalYearData = async () => {
     try {
-      const res = await fetch('/api/liasse')
+      // Fetch all transactions
+      const res = await fetch('/api/transactions')
       const data = await res.json()
-      setLiasses(data.liasses || [])
+      const transactions = data.transactions || []
+
+      // Calculate fiscal year data
+      // Fiscal year YYYY runs from Dec 1 (YYYY-1) to Nov 30 (YYYY)
+      const fyData: Record<number, FiscalYearData> = {}
+      
+      transactions.forEach((t: { date: string; amount: number }) => {
+        const date = new Date(t.date)
+        const year = date.getFullYear()
+        const month = date.getMonth() + 1 // 1-12
+        
+        // Determine fiscal year
+        let fy: number
+        if (month === 12) {
+          // December belongs to FY (year + 1)
+          fy = year + 1
+        } else {
+          // Jan-Nov belongs to FY year
+          fy = year
+        }
+
+        if (!fyData[fy]) {
+          fyData[fy] = {
+            year: fy,
+            income: 0,
+            expenses: 0,
+            profit: 0,
+            isAmount: 0,
+            tvaCollectee: 0,
+            tvaDeductible: 0,
+            tvaDue: 0,
+          }
+        }
+
+        if (t.amount > 0) {
+          fyData[fy].income += t.amount
+          fyData[fy].tvaCollectee += t.amount * 0.20 // 20% TVA
+        } else {
+          fyData[fy].expenses += Math.abs(t.amount)
+          fyData[fy].tvaDeductible += Math.abs(t.amount) * 0.20 // 20% TVA
+        }
+      })
+
+      // Calculate profit and IS for each fiscal year
+      Object.keys(fyData).forEach(fy => {
+        const year = parseInt(fy)
+        fyData[year].profit = fyData[year].income - fyData[year].expenses
+        fyData[year].isAmount = calculateIS(fyData[year].profit)
+        fyData[year].tvaDue = fyData[year].tvaCollectee - fyData[year].tvaDeductible
+      })
+
+      setFiscalYearData(fyData)
     } catch (error) {
-      console.error('Error fetching liasses:', error)
+      console.error('Error fetching fiscal year data:', error)
     }
   }
 
@@ -245,8 +301,7 @@ export function DeclarationsSection({ settings }: DeclarationsSectionProps) {
   const isAcomptes = getISAcomptesDates(selectedYear)
   const today = new Date()
 
-  // Available years from liasses
-  const availableYears = liasses.map(l => l.year).sort((a, b) => b - a)
+  // Year options
   const yearOptions = [2026, 2025, 2024, 2023, 2022]
 
   return (
@@ -258,7 +313,7 @@ export function DeclarationsSection({ settings }: DeclarationsSectionProps) {
             <div>
               <h2 className="text-xl font-bold text-blue-900">Déclarations Fiscales</h2>
               <p className="text-sm text-blue-700">
-                Gérez vos acomptes IS et déclarations TVA par exercice fiscal.
+                Calculs automatiques basés sur vos transactions.
               </p>
             </div>
             <div className="flex items-center gap-3">
@@ -281,11 +336,8 @@ export function DeclarationsSection({ settings }: DeclarationsSectionProps) {
       <Alert>
         <Info className="h-4 w-4" />
         <AlertDescription>
-          <strong>Exercice fiscal:</strong> Votre exercice clos le 30/11/{selectedYear}. 
-          Les acomptes IS sont dus les 15 mars, 15 juin, 15 septembre et 15 décembre de l'année de clôture.
-          {!previousLiasse && (
-            <><br /><strong className="text-amber-600">⚠️ Aucune liasse trouvée pour l'exercice précédent (30/11/{selectedYear - 1}).</strong> Générez d'abord votre liasse fiscale pour calculer les acomptes.</>
-          )}
+          <strong>Exercice fiscal:</strong> Du 01/12/{selectedYear - 1} au 30/11/{selectedYear}.
+          Les acomptes IS sont dus les 15 mars, 15 juin, 15 septembre et 15 décembre.
         </AlertDescription>
       </Alert>
 
@@ -306,32 +358,57 @@ export function DeclarationsSection({ settings }: DeclarationsSectionProps) {
                 Acomptes IS - Exercice {selectedYear}
               </CardTitle>
               <CardDescription>
-                Calculés sur la base de l'IS de l'exercice précédent (30/11/{selectedYear - 1})
-                {previousLiasse ? (
-                  <span className="text-green-600 ml-2">✓ Liasse disponible</span>
-                ) : (
-                  <span className="text-amber-600 ml-2">⚠️ Liasse non générée</span>
-                )}
+                Calculés automatiquement sur la base de l'IS de l'exercice précédent (N-1)
               </CardDescription>
             </CardHeader>
             <CardContent>
+              {/* Previous Year Summary */}
+              <div className="p-4 bg-muted rounded-lg mb-6">
+                <h4 className="font-semibold mb-3">Exercice N-1 (30/11/{selectedYear - 1})</h4>
+                <div className="grid md:grid-cols-4 gap-4">
+                  <div>
+                    <p className="text-sm text-muted-foreground">Chiffre d'affaires</p>
+                    <p className="text-lg font-bold text-emerald-600">
+                      {formatCurrency(previousFYData?.income || 0)}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Charges</p>
+                    <p className="text-lg font-bold text-red-600">
+                      {formatCurrency(previousFYData?.expenses || 0)}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Bénéfice fiscal</p>
+                    <p className={`text-lg font-bold ${(previousFYData?.profit || 0) >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                      {formatCurrency(previousFYData?.profit || 0)}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">IS calculé</p>
+                    <p className="text-lg font-bold text-blue-600">{formatCurrency(previousYearIS)}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Acomptes Summary */}
               <div className="grid md:grid-cols-3 gap-4 mb-6">
-                <div className="p-4 bg-muted rounded-lg">
-                  <p className="text-sm text-muted-foreground">IS exercice N-1 (30/11/{selectedYear - 1})</p>
-                  <p className="text-2xl font-bold">{formatCurrency(previousYearIS)}</p>
+                <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
+                  <p className="text-sm text-muted-foreground">IS exercice N-1</p>
+                  <p className="text-2xl font-bold text-blue-600">{formatCurrency(previousYearIS)}</p>
                 </div>
-                <div className="p-4 bg-muted rounded-lg">
+                <div className="p-4 bg-purple-50 rounded-lg border border-purple-200">
                   <p className="text-sm text-muted-foreground">Montant par acompte</p>
-                  <p className="text-2xl font-bold text-blue-600">{formatCurrency(acompteAmount)}</p>
+                  <p className="text-2xl font-bold text-purple-600">{formatCurrency(acompteAmount)}</p>
                 </div>
-                <div className="p-4 bg-muted rounded-lg">
-                  <p className="text-sm text-muted-foreground">Total acomptes</p>
-                  <p className="text-2xl font-bold">{formatCurrency(acompteAmount * 4)}</p>
+                <div className="p-4 bg-indigo-50 rounded-lg border border-indigo-200">
+                  <p className="text-sm text-muted-foreground">Total acomptes annuels</p>
+                  <p className="text-2xl font-bold text-indigo-600">{formatCurrency(acompteAmount * 4)}</p>
                 </div>
               </div>
 
               {/* Acomptes Schedule */}
-              <h4 className="font-semibold mb-3">Calendrier des acomptes</h4>
+              <h4 className="font-semibold mb-3">Calendrier des acomptes {selectedYear}</h4>
               <div className="rounded-md border">
                 <Table>
                   <TableHeader>
@@ -435,6 +512,34 @@ export function DeclarationsSection({ settings }: DeclarationsSectionProps) {
                   </div>
                 </div>
               )}
+
+              {/* Current Year Preview */}
+              {selectedFYData && (
+                <div className="mt-6 p-4 bg-green-50 border border-green-200 rounded-lg">
+                  <h4 className="font-semibold text-green-800 mb-2">Aperçu exercice en cours (30/11/{selectedYear})</h4>
+                  <div className="grid md:grid-cols-4 gap-4 text-sm text-green-700">
+                    <div>
+                      <p className="text-green-600">CA</p>
+                      <p className="font-bold">{formatCurrency(selectedFYData.income)}</p>
+                    </div>
+                    <div>
+                      <p className="text-green-600">Charges</p>
+                      <p className="font-bold">{formatCurrency(selectedFYData.expenses)}</p>
+                    </div>
+                    <div>
+                      <p className="text-green-600">Bénéfice</p>
+                      <p className="font-bold">{formatCurrency(selectedFYData.profit)}</p>
+                    </div>
+                    <div>
+                      <p className="text-green-600">IS estimé</p>
+                      <p className="font-bold">{formatCurrency(selectedFYData.isAmount)}</p>
+                    </div>
+                  </div>
+                  <p className="text-xs text-green-600 mt-2">
+                    Cet IS estimé servira au calcul des acomptes de l'exercice {selectedYear + 1}
+                  </p>
+                </div>
+              )}
             </CardContent>
           </Card>
 
@@ -443,9 +548,9 @@ export function DeclarationsSection({ settings }: DeclarationsSectionProps) {
             <CardContent className="py-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <h4 className="font-semibold">Générer les déclarations IS</h4>
+                  <h4 className="font-semibold">Enregistrer les déclarations IS</h4>
                   <p className="text-sm text-muted-foreground">
-                    Créez les 4 acomptes IS pour l'exercice {selectedYear}
+                    Créez les 4 acomptes IS pour suivi dans l'historique
                   </p>
                 </div>
                 <Button onClick={() => generateISDeclaration(selectedYear)}>
@@ -486,17 +591,19 @@ export function DeclarationsSection({ settings }: DeclarationsSectionProps) {
               ) : (
                 <>
                   <div className="grid md:grid-cols-3 gap-4 mb-6">
-                    <div className="p-4 bg-muted rounded-lg">
-                      <p className="text-sm text-muted-foreground">TVA collectée</p>
+                    <div className="p-4 bg-red-50 rounded-lg border border-red-200">
+                      <p className="text-sm text-muted-foreground">TVA collectée (20%)</p>
                       <p className="text-2xl font-bold text-red-600">{formatCurrency(tvaCollectee)}</p>
+                      <p className="text-xs text-muted-foreground mt-1">Sur {formatCurrency(selectedFYData?.income || 0)} HT</p>
                     </div>
-                    <div className="p-4 bg-muted rounded-lg">
-                      <p className="text-sm text-muted-foreground">TVA déductible</p>
+                    <div className="p-4 bg-green-50 rounded-lg border border-green-200">
+                      <p className="text-sm text-muted-foreground">TVA déductible (20%)</p>
                       <p className="text-2xl font-bold text-green-600">{formatCurrency(tvaDeductible)}</p>
+                      <p className="text-xs text-muted-foreground mt-1">Sur {formatCurrency(selectedFYData?.expenses || 0)} HT</p>
                     </div>
-                    <div className="p-4 bg-muted rounded-lg">
-                      <p className="text-sm text-muted-foreground">TVA due</p>
-                      <p className={`text-2xl font-bold ${tvaDue >= 0 ? 'text-red-600' : 'text-green-600'}`}>
+                    <div className="p-4 bg-amber-50 rounded-lg border border-amber-200">
+                      <p className="text-sm text-muted-foreground">TVA nette à payer</p>
+                      <p className={`text-2xl font-bold ${tvaDue >= 0 ? 'text-amber-600' : 'text-green-600'}`}>
                         {tvaDue >= 0 ? formatCurrency(tvaDue) : `Crédit ${formatCurrency(Math.abs(tvaDue))}`}
                       </p>
                     </div>
@@ -512,35 +619,37 @@ export function DeclarationsSection({ settings }: DeclarationsSectionProps) {
                   </div>
 
                   {/* TVA Acomptes */}
-                  <div className="mt-6">
-                    <h4 className="font-semibold mb-3">Acomptes TVA (régime simplifié)</h4>
-                    <p className="text-sm text-muted-foreground mb-3">
-                      Si votre TVA due dépasse 1 000 €, vous devez verser 2 acomptes semestriels:
-                    </p>
-                    <div className="rounded-md border">
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead>Acompte</TableHead>
-                            <TableHead>Date limite</TableHead>
-                            <TableHead>Montant (55% de l'année précédente)</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          <TableRow>
-                            <TableCell>1er acompte (juillet)</TableCell>
-                            <TableCell className="font-mono">15 juillet {selectedYear}</TableCell>
-                            <TableCell className="font-mono">{formatCurrency(tvaDue * 0.55)}</TableCell>
-                          </TableRow>
-                          <TableRow>
-                            <TableCell>2e acompte (décembre)</TableCell>
-                            <TableCell className="font-mono">15 décembre {selectedYear}</TableCell>
-                            <TableCell className="font-mono">{formatCurrency(tvaDue * 0.55)}</TableCell>
-                          </TableRow>
-                        </TableBody>
-                      </Table>
+                  {tvaDue > 1000 && (
+                    <div className="mt-6">
+                      <h4 className="font-semibold mb-3">Acomptes TVA (régime simplifié)</h4>
+                      <p className="text-sm text-muted-foreground mb-3">
+                        TVA due supérieure à 1 000 € → 2 acomptes semestriels requis:
+                      </p>
+                      <div className="rounded-md border">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Acompte</TableHead>
+                              <TableHead>Date limite</TableHead>
+                              <TableHead>Montant (55%)</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            <TableRow>
+                              <TableCell>1er acompte</TableCell>
+                              <TableCell className="font-mono">15 juillet {selectedYear}</TableCell>
+                              <TableCell className="font-mono">{formatCurrency(tvaDue * 0.55)}</TableCell>
+                            </TableRow>
+                            <TableRow>
+                              <TableCell>2e acompte</TableCell>
+                              <TableCell className="font-mono">15 décembre {selectedYear}</TableCell>
+                              <TableCell className="font-mono">{formatCurrency(tvaDue * 0.55)}</TableCell>
+                            </TableRow>
+                          </TableBody>
+                        </Table>
+                      </div>
                     </div>
-                  </div>
+                  )}
                 </>
               )}
             </CardContent>
@@ -552,14 +661,14 @@ export function DeclarationsSection({ settings }: DeclarationsSectionProps) {
               <CardContent className="py-6">
                 <div className="flex items-center justify-between">
                   <div>
-                    <h4 className="font-semibold">Générer la déclaration TVA CA12</h4>
+                    <h4 className="font-semibold">Enregistrer la déclaration TVA CA12</h4>
                     <p className="text-sm text-muted-foreground">
-                      Créez la déclaration CA12 pour l'exercice {selectedYear}
+                      Pour suivi dans l'historique des déclarations
                     </p>
                   </div>
                   <Button onClick={() => generateTVADeclaration(selectedYear)}>
                     <FileText className="h-4 w-4 mr-2" />
-                    Générer CA12
+                    Enregistrer CA12
                   </Button>
                 </div>
               </CardContent>
@@ -581,7 +690,7 @@ export function DeclarationsSection({ settings }: DeclarationsSectionProps) {
                 <div className="text-center py-12 text-muted-foreground">
                   <FileText className="h-12 w-12 mx-auto mb-4 opacity-50" />
                   <p>Aucune déclaration enregistrée</p>
-                  <p className="text-sm mt-2">Générez vos déclarations IS ou TVA</p>
+                  <p className="text-sm mt-2">Les calculs sont automatiques, enregistrez pour suivi</p>
                 </div>
               ) : (
                 <div className="rounded-md border">

@@ -80,7 +80,23 @@ export const authOptions: NextAuthOptions = {
       }
       return session
     },
-    async signIn({ user }) {
+    async signIn({ user, account }) {
+      // SINGLE-USER MODE: Check if any user already exists
+      const userCount = await db.user.count()
+      
+      // For Google OAuth (new user registration)
+      if (account?.provider === 'google') {
+        // Check if this Google email is already registered
+        const existingUser = await db.user.findUnique({
+          where: { email: user.email || '' },
+        })
+        
+        // If no existing user and there's already a user, block
+        if (!existingUser && userCount > 0) {
+          return false // This will redirect back to login with error
+        }
+      }
+      
       // For Google OAuth users, link existing settings if available
       if (user.email && user.id) {
         const existingSettings = await db.settings.findFirst({

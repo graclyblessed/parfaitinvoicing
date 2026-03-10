@@ -4,6 +4,16 @@ import { db } from '@/lib/db'
 
 export async function POST(request: NextRequest) {
   try {
+    // SINGLE-USER MODE: Check if any user already exists
+    const userCount = await db.user.count()
+    
+    if (userCount > 0) {
+      return NextResponse.json(
+        { error: 'Les inscriptions sont désactivées. Cette application est en mode mono-utilisateur.' },
+        { status: 403 }
+      )
+    }
+
     const { name, email, password } = await request.json()
 
     if (!email || !password) {
@@ -20,7 +30,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Check if user exists
+    // Check if user exists with this email
     const existingUser = await db.user.findUnique({
       where: { email },
     })

@@ -517,7 +517,7 @@ export function DeclarationsSection({ settings }: DeclarationsSectionProps) {
               {selectedFYData && (
                 <div className="mt-6 p-4 bg-green-50 border border-green-200 rounded-lg">
                   <h4 className="font-semibold text-green-800 mb-2">Aperçu exercice en cours (30/11/{selectedYear})</h4>
-                  <div className="grid md:grid-cols-4 gap-4 text-sm text-green-700">
+                  <div className="grid md:grid-cols-3 gap-4 text-sm text-green-700 mb-4">
                     <div>
                       <p className="text-green-600">CA</p>
                       <p className="font-bold">{formatCurrency(selectedFYData.income)}</p>
@@ -530,14 +530,22 @@ export function DeclarationsSection({ settings }: DeclarationsSectionProps) {
                       <p className="text-green-600">Bénéfice</p>
                       <p className="font-bold">{formatCurrency(selectedFYData.profit)}</p>
                     </div>
-                    <div>
+                  </div>
+                  <Separator className="my-3 bg-green-200" />
+                  <div className="grid md:grid-cols-2 gap-4 text-sm text-green-700">
+                    <div className="p-2 bg-green-100 rounded">
                       <p className="text-green-600">IS estimé</p>
-                      <p className="font-bold">{formatCurrency(selectedFYData.isAmount)}</p>
+                      <p className="font-bold text-lg">{formatCurrency(selectedFYData.isAmount)}</p>
+                      <p className="text-xs text-green-600">→ Servira aux acomptes IS {selectedYear + 1}</p>
+                    </div>
+                    <div className="p-2 bg-amber-100 rounded">
+                      <p className="text-amber-600">TVA nette estimée</p>
+                      <p className={`font-bold text-lg ${selectedFYData.tvaDue >= 0 ? 'text-amber-700' : 'text-green-700'}`}>
+                        {selectedFYData.tvaDue >= 0 ? formatCurrency(selectedFYData.tvaDue) : `Crédit ${formatCurrency(Math.abs(selectedFYData.tvaDue))}`}
+                      </p>
+                      <p className="text-xs text-amber-600">→ Servira aux acomptes TVA {selectedYear + 1}</p>
                     </div>
                   </div>
-                  <p className="text-xs text-green-600 mt-2">
-                    Cet IS estimé servira au calcul des acomptes de l'exercice {selectedYear + 1}
-                  </p>
                 </div>
               )}
             </CardContent>

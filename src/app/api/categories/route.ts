@@ -5,20 +5,23 @@ import { DEFAULT_CATEGORIES } from '@/lib/tax'
 // Initialize default categories
 export async function GET() {
   try {
-    // Check if categories exist
-    const existingCategories = await db.category.count()
-    
-    if (existingCategories === 0) {
-      // Create default categories
-      await db.category.createMany({
-        data: DEFAULT_CATEGORIES.map(cat => ({
-          name: cat.name,
-          type: cat.type,
-          color: cat.color,
-          icon: cat.icon,
-          taxDeductible: cat.taxDeductible,
-        })),
+    // Ensure all default categories exist
+    for (const cat of DEFAULT_CATEGORIES) {
+      const existing = await db.category.findFirst({
+        where: { name: cat.name }
       })
+      
+      if (!existing) {
+        await db.category.create({
+          data: {
+            name: cat.name,
+            type: cat.type,
+            color: cat.color,
+            icon: cat.icon,
+            taxDeductible: cat.taxDeductible,
+          },
+        })
+      }
     }
     
     const categories = await db.category.findMany({

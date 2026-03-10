@@ -1,6 +1,4 @@
-import { Resend } from 'resend'
-
-const resend = new Resend(process.env.RESEND_API_KEY)
+import nodemailer from 'nodemailer'
 
 interface DeadlineReminder {
   name: string
@@ -203,30 +201,117 @@ function generateEmailText(data: EmailData): string {
   return text
 }
 
-// Send reminder email
-export async function sendReminderEmail(data: EmailData): Promise<{ success: boolean; error?: string }> {
-  // Check if Resend API key is configured
-  if (!process.env.RESEND_API_KEY) {
-    console.error('RESEND_API_KEY not configured')
-    return { success: false, error: 'Email service not configured. Please add RESEND_API_KEY to your environment variables.' }
+// Create Gmail SMTP transporter
+function createGmailTransporter() {
+  const user = process.env.GMAIL_SMTP_USER
+  const pass = process.env.GMAIL_SMTP_PASS
+
+  if (!user || !pass) {
+    return null
   }
 
-  try {
-    const { data: result, error } = await resend.emails.send({
-      from: 'Parfait Invoicing <onboarding@resend.dev>',
-      to: data.to,
-      subject: `📅 Rappel: ${data.urgentDeadlines.length} échéance(s) urgente(s) - ${data.companyName}`,
-      html: generateEmailHTML(data),
-      text: generateEmailText(data),
-    })
+  return nodemailer.createTransport({
+    host: 'smtp.gmail.com',
+    port: 587,
+    secure: false, // true for 465, false for other ports
+    auth: {
+      user,
+      pass,
+    },
+  })
+}
 
-    if (error) {
-      console.error('Resend error:', error)
-      return { success: false, error: typeof error === 'string' ? error : (error as Error).message || 'Unknown error' }
+// Check which email provider is configured
+export function getEmailProviderStatus(): { 
+  provider: 'gmail' | 'resend' | 'none'
+  configured: boolean
+  message: string 
+} {
+  const gmailUser = process.env.GMAIL_SMTP_USER
+  const gmailPass = process.env.GMAIL_SMTP_PASS
+  const resendKey = process.env.RESEND_API_KEY
+
+  if (gmailUser && gmailPass) {
+    return {
+      provider: 'gmail',
+      configured: true,
+      message: `Google SMTP configured (${gmailUser})`
+    }
+  }
+
+  if (resendKey) {
+    return {
+      provider: 'resend',
+      configured: true,
+      message: 'Resend API configured'
+    }
+  }
+
+  return {
+    provider: 'none',
+    configured: false,
+    message: 'No email provider configured. Add GMAIL_SMTP_USER and GMAIL_SMTP_PASS for Google Workspace, or RESEND_API_KEY for Resend.'
+  }
+}
+
+// Send reminder email (supports Gmail SMTP and Resend)
+export async function sendReminderEmail(data: EmailData): Promise<{ success: boolean; error?: string }> {
+  const providerStatus = getEmailProviderStatus()
+
+  if (!providerStatus.configured) {
+    console.error('No email provider configured:', providerStatus.message)
+    return { success: false, error: providerStatus.message }
+  }
+
+  const subject = `📅 Rappel: ${data.urgentDeadlines.length} échéance(s) urgente(s) - ${data.companyName}`
+  const html = generateEmailHTML(data)
+  const text = generateEmailText(data)
+
+  try {
+    // Use Gmail SMTP if configured (preferred for Google Workspace users)
+    if (providerStatus.provider === 'gmail') {
+      const transporter = createGmailTransporter()
+      
+      if (!transporter) {
+        return { success: false, error: 'Failed to create Gmail transporter' }
+      }
+
+      const info = await transporter.sendMail({
+        from: `"Parfait Invoicing" <${process.env.GMAIL_SMTP_USER}>`,
+        to: data.to,
+        subject,
+        html,
+        text,
+      })
+
+      console.log('Email sent via Gmail SMTP:', info.messageId)
+      return { success: true }
     }
 
-    console.log('Email sent successfully:', result)
-    return { success: true }
+    // Fallback to Resend
+    if (providerStatus.provider === 'resend') {
+      // Dynamic import for Resend (only load if needed)
+      const { Resend } = await import('resend')
+      const resend = new Resend(process.env.RESEND_API_KEY)
+
+      const { data: result, error } = await resend.emails.send({
+        from: 'Parfait Invoicing <onboarding@resend.dev>',
+        to: data.to,
+        subject,
+        html,
+        text,
+      })
+
+      if (error) {
+        console.error('Resend error:', error)
+        return { success: false, error: typeof error === 'string' ? error : (error as Error).message || 'Unknown error' }
+      }
+
+      console.log('Email sent via Resend:', result)
+      return { success: true }
+    }
+
+    return { success: false, error: 'No email provider available' }
   } catch (error) {
     console.error('Failed to send email:', error)
     return { success: false, error: String(error) }

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { sendReminderEmail } from '@/lib/email'
+import { sendReminderEmail, getEmailProviderStatus } from '@/lib/email'
 
 // Vercel Cron Job endpoint - runs daily at 8:00 AM UTC
 // Configured in vercel.json
@@ -29,12 +29,13 @@ export async function GET(request: NextRequest) {
       })
     }
 
-    // Check if Resend is configured
-    if (!process.env.RESEND_API_KEY) {
-      console.log('⚠️ RESEND_API_KEY not configured')
+    // Check email provider
+    const providerStatus = getEmailProviderStatus()
+    if (!providerStatus.configured) {
+      console.log('⚠️ No email provider configured:', providerStatus.message)
       return NextResponse.json({ 
         status: 'skipped',
-        reason: 'RESEND_API_KEY not configured in environment variables' 
+        reason: providerStatus.message 
       })
     }
 
@@ -119,12 +120,13 @@ export async function GET(request: NextRequest) {
       )
     )
 
-    console.log(`✅ Email sent to ${settings.email} for ${allDeadlines.length} deadlines`)
+    console.log(`✅ Email sent to ${settings.email} for ${allDeadlines.length} deadlines via ${providerStatus.provider}`)
     
     return NextResponse.json({
       status: 'success',
       sent: allDeadlines.length,
       email: settings.email,
+      provider: providerStatus.provider,
       urgent: urgentDeadlines.length,
       upcoming: upcomingDeadlines.length,
       deadlines: allDeadlines.map((d) => ({

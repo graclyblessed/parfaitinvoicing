@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { sendReminderEmail } from '@/lib/email'
+import { sendReminderEmail, getEmailProviderStatus } from '@/lib/email'
 
 // POST - Send reminder email for upcoming deadlines (called by cron or manually)
 export async function POST(request: NextRequest) {
@@ -13,6 +13,15 @@ export async function POST(request: NextRequest) {
     
     if (!settings?.email) {
       return NextResponse.json({ error: 'Email not configured in settings' }, { status: 400 })
+    }
+
+    // Check email provider
+    const providerStatus = getEmailProviderStatus()
+    if (!providerStatus.configured) {
+      return NextResponse.json({ 
+        error: providerStatus.message,
+        hint: 'Add GMAIL_SMTP_USER and GMAIL_SMTP_PASS (for Google Workspace) or RESEND_API_KEY (for Resend) to your Vercel environment variables'
+      }, { status: 400 })
     }
 
     // Get current time boundaries
@@ -73,7 +82,6 @@ export async function POST(request: NextRequest) {
     if (!result.success) {
       return NextResponse.json({ 
         error: result.error || 'Failed to send email',
-        hint: 'Make sure RESEND_API_KEY is set in your Vercel environment variables'
       }, { status: 500 })
     }
 
@@ -95,6 +103,7 @@ export async function POST(request: NextRequest) {
       success: true,
       sent: allDeadlines.length,
       email: settings.email,
+      provider: providerStatus.provider,
       urgent: urgentDeadlines.length,
       upcoming: upcomingDeadlines.length,
       deadlines: allDeadlines.map((d) => ({
@@ -113,10 +122,12 @@ export async function POST(request: NextRequest) {
 export async function GET() {
   try {
     const settings = await db.settings.findFirst()
+    const providerStatus = getEmailProviderStatus()
     
     if (!settings?.email) {
       return NextResponse.json({ 
         configured: false,
+        emailProvider: providerStatus,
         message: 'Email not configured in settings. Go to Paramètres to add your email.'
       })
     }
@@ -147,14 +158,10 @@ export async function GET() {
       },
     })
 
-    // Check if email service is configured
-    const emailConfigured = !!process.env.RESEND_API_KEY
-
     return NextResponse.json({
       configured: true,
       email: settings.email,
-      emailServiceConfigured: emailConfigured,
-      emailService: emailConfigured ? 'Resend' : 'Not configured',
+      emailProvider: providerStatus,
       urgent: urgentDeadlines.length,
       upcoming: upcomingDeadlines.length,
       urgentDeadlines: urgentDeadlines.map((d) => ({
@@ -171,9 +178,9 @@ export async function GET() {
         type: d.type,
         amount: d.amount,
       })),
-      message: emailConfigured 
-        ? 'Email reminders are fully configured and ready.'
-        : 'Add RESEND_API_KEY to Vercel environment variables to enable email sending.',
+      message: providerStatus.configured 
+        ? `Email reminders ready via ${providerStatus.provider === 'gmail' ? 'Google SMTP' : 'Resend'}.`
+        : providerStatus.message,
     })
   } catch (error) {
     console.error('Error checking reminders:', error)

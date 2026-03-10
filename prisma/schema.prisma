@@ -41,6 +41,7 @@ model Category {
   updatedAt   DateTime @updatedAt
   transactions Transaction[]
   expenses    Expense[]
+  rules       CategoryRule[]
 }
 
 // Bank transactions from CSV
@@ -233,4 +234,19 @@ model LiasseFiscale {
   updatedAt        DateTime @updatedAt
   
   @@unique([year])
+}
+
+// Category learning rules - auto-learned from user categorizations
+model CategoryRule {
+  id              String   @id @default(cuid())
+  pattern         String   // Text pattern to match in description
+  categoryId      String
+  category        Category @relation(fields: [categoryId], references: [id])
+  transactionType String   // income or expense
+  matchCount      Int      @default(1) // How many times this rule was applied
+  lastUsed        DateTime @default(now())
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  @@unique([pattern]) // One rule per pattern
 }

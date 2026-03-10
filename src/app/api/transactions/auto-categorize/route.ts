@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 
-// Keyword-based category mapping
+// Keyword-based category mapping (fallback)
 const CATEGORY_KEYWORDS: Record<string, { keywords: string[]; type: 'income' | 'expense' }> = {
   // Income patterns
   'Prestations de services': {
@@ -20,7 +20,7 @@ const CATEGORY_KEYWORDS: Record<string, { keywords: string[]; type: 'income' | '
   },
   'Logiciels & Abonnements': {
     type: 'expense',
-    keywords: ['abonnement', 'software', 'logiciel', 'saas', 'netflix', 'spotify', 'adobe', 'microsoft', 'google', 'dropbox', 'notion', 'slack', 'zoom', 'github', 'vercel', 'ovh', 'gandi', 'domaine', 'hébergement', 'hosting', 'cloud', 'aws', 'azure', 'openai', 'chatgpt', 'claude', 'cursor']
+    keywords: ['abonnement', 'software', 'logiciel', 'saas', 'netflix', 'spotify', 'adobe', 'microsoft', 'google', 'dropbox', 'notion', 'slack', 'zoom', 'github', 'vercel', 'ovh', 'gandi', 'domaine', 'hébergement', 'hosting', 'cloud', 'aws', 'azure', 'openai', 'chatgpt', 'claude', 'cursor', 'paddle', 'stripe']
   },
   'Télécommunications': {
     type: 'expense',
@@ -84,6 +84,42 @@ const CATEGORY_KEYWORDS: Record<string, { keywords: string[]; type: 'income' | '
   },
 }
 
+// Extract pattern from description (e.g., "PADDLE.NET* VPSDIME Lisboa PRT" -> "paddle.net*")
+function extractPattern(description: string): string {
+  const desc = description.toLowerCase().trim()
+  
+  // Remove common prefixes/suffixes
+  let pattern = desc
+    .replace(/^\*\s*/, '')
+    .replace(/\s*\*$/, '')
+  
+  // For patterns like "VENDOR* Something", extract "vendor*"
+  const starMatch = pattern.match(/^([a-z0-9._-]+\*[a-z0-9._-]*)/)
+  if (starMatch) {
+    return starMatch[1]
+  }
+  
+  // For domain patterns like "vendor.com" or "vendor.net"
+  const domainMatch = pattern.match(/([a-z0-9-]+\.[a-z0-9-]+)/)
+  if (domainMatch) {
+    return domainMatch[1]
+  }
+  
+  // For card payments like "vendor city country"
+  const parts = pattern.split(/\s+/)
+  if (parts.length >= 1) {
+    // Return first significant word (at least 3 chars)
+    for (const part of parts) {
+      if (part.length >= 3 && !/^(the|for|and|via|par)$/i.test(part)) {
+        return part
+      }
+    }
+  }
+  
+  // Fallback: return first 20 chars
+  return pattern.substring(0, 20)
+}
+
 // Auto-categorize transactions
 export async function POST(request: NextRequest) {
   try {
@@ -101,36 +137,127 @@ export async function POST(request: NextRequest) {
     const categories = await db.category.findMany()
     const categoryMap = new Map(categories.map(c => [c.name.toLowerCase(), c]))
     
-    let categorized = 0
-    const results: Array<{ id: string; description: string; category: string }> = []
+    // Get all learned rules
+    const rules = await db.categoryRule.findMany({
+      orderBy: { matchCount: 'desc' }
+    })
+    
+    // Get previously categorized transactions for learning
+    const categorized = await db.transaction.findMany({
+      where: {
+        labeled: true,
+        categoryId: { not: null }
+      },
+      select: {
+        description: true,
+        categoryId: true,
+        type: true,
+      }
+    })
+    
+    // Build a map of patterns to categories from existing transactions
+    const existingPatterns = new Map<string, { categoryId: string; type: string }>()
+    for (const t of categorized) {
+      const pattern = extractPattern(t.description)
+      if (pattern && !existingPatterns.has(pattern)) {
+        existingPatterns.set(pattern, { categoryId: t.categoryId!, type: t.type })
+      }
+    }
+    
+    let categorized_count = 0
+    const results: Array<{ id: string; description: string; category: string; source: string }> = []
     
     for (const transaction of uncategorized) {
       const description = transaction.description.toLowerCase()
+      const transactionType = transaction.amount >= 0 ? 'income' : 'expense'
       
-      // Find matching category
-      let bestMatch: { category: string; score: number } | null = null
+      let bestMatch: { categoryId: string; source: string } | null = null
+      const pattern = extractPattern(transaction.description)
       
-      for (const [categoryName, config] of Object.entries(CATEGORY_KEYWORDS)) {
-        // Check if transaction type matches category type
-        const transactionType = transaction.amount >= 0 ? 'income' : 'expense'
-        if (config.type !== transactionType) continue
-        
-        // Count keyword matches
-        let score = 0
-        for (const keyword of config.keywords) {
-          if (description.includes(keyword.toLowerCase())) {
-            score += keyword.length // Longer keywords get higher score
+      // 1. First check learned rules (highest priority)
+      for (const rule of rules) {
+        if (rule.transactionType === transactionType && 
+            description.includes(rule.pattern.toLowerCase())) {
+          bestMatch = { categoryId: rule.categoryId, source: 'learned_rule' }
+          // Update rule usage
+          await db.categoryRule.update({
+            where: { id: rule.id },
+            data: { 
+              matchCount: { increment: 1 },
+              lastUsed: new Date()
+            }
+          })
+          break
+        }
+      }
+      
+      // 2. Check patterns from existing categorized transactions
+      if (!bestMatch) {
+        for (const [pat, data] of existingPatterns) {
+          if (description.includes(pat) && data.type === transactionType) {
+            const category = categories.find(c => c.id === data.categoryId)
+            if (category) {
+              bestMatch = { categoryId: data.categoryId, source: 'existing_pattern' }
+              // Save this as a learned rule for future use
+              try {
+                await db.categoryRule.upsert({
+                  where: { pattern: pat },
+                  create: {
+                    pattern: pat,
+                    categoryId: data.categoryId,
+                    transactionType: data.type,
+                  },
+                  update: {
+                    matchCount: { increment: 1 },
+                    lastUsed: new Date()
+                  }
+                })
+              } catch (e) {
+                // Ignore upsert errors
+              }
+              break
+            }
           }
         }
-        
-        if (score > 0 && (!bestMatch || score > bestMatch.score)) {
-          bestMatch = { category: categoryName, score }
+      }
+      
+      // 3. Fallback to keyword matching
+      if (!bestMatch) {
+        for (const [categoryName, config] of Object.entries(CATEGORY_KEYWORDS)) {
+          if (config.type !== transactionType) continue
+          
+          let score = 0
+          for (const keyword of config.keywords) {
+            if (description.includes(keyword.toLowerCase())) {
+              score += keyword.length
+            }
+          }
+          
+          if (score > 0) {
+            const category = categoryMap.get(categoryName.toLowerCase())
+            if (category) {
+              bestMatch = { categoryId: category.id, source: 'keyword' }
+              // Save this as a learned rule
+              try {
+                await db.categoryRule.create({
+                  data: {
+                    pattern: pattern,
+                    categoryId: category.id,
+                    transactionType: transactionType,
+                  }
+                })
+              } catch (e) {
+                // Pattern might already exist
+              }
+              break
+            }
+          }
         }
       }
       
       // Apply category if found
       if (bestMatch) {
-        const category = categoryMap.get(bestMatch.category.toLowerCase())
+        const category = categories.find(c => c.id === bestMatch!.categoryId)
         if (category) {
           await db.transaction.update({
             where: { id: transaction.id },
@@ -140,11 +267,12 @@ export async function POST(request: NextRequest) {
               labeled: true,
             },
           })
-          categorized++
+          categorized_count++
           results.push({
             id: transaction.id,
             description: transaction.description.substring(0, 50),
             category: category.name,
+            source: bestMatch.source,
           })
         }
       }
@@ -152,9 +280,9 @@ export async function POST(request: NextRequest) {
     
     return NextResponse.json({
       success: true,
-      categorized,
+      categorized: categorized_count,
       total: uncategorized.length,
-      results: results.slice(0, 50), // Return first 50 for preview
+      results: results.slice(0, 50),
     })
   } catch (error) {
     console.error('Auto-categorize error:', error)

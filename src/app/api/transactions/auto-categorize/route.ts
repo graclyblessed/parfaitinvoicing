@@ -20,7 +20,7 @@ const CATEGORY_KEYWORDS: Record<string, { keywords: string[]; type: 'income' | '
   },
   'Logiciels & Abonnements': {
     type: 'expense',
-    keywords: ['abonnement', 'software', 'logiciel', 'saas', 'netflix', 'spotify', 'adobe', 'microsoft', 'google', 'dropbox', 'notion', 'slack', 'zoom', 'github', 'vercel', 'ovh', 'gandi', 'domaine', 'hébergement', 'hosting', 'cloud', 'aws', 'azure', 'openai', 'chatgpt', 'claude', 'cursor', 'paddle', 'stripe']
+    keywords: ['abonnement', 'software', 'logiciel', 'saas', 'netflix', 'spotify', 'adobe', 'microsoft', 'google', 'dropbox', 'notion', 'slack', 'zoom', 'github', 'vercel', 'ovh', 'gandi', 'domaine', 'hébergement', 'hosting', 'cloud', 'aws', 'azure', 'openai', 'chatgpt', 'claude', 'cursor', 'paddle', 'stripe', 'vpsdime', 'digitalocean', 'linode', 'hetzner']
   },
   'Télécommunications': {
     type: 'expense',
@@ -28,7 +28,7 @@ const CATEGORY_KEYWORDS: Record<string, { keywords: string[]; type: 'income' | '
   },
   'Loyer & Charges': {
     type: 'expense',
-    keywords: ['loyer', 'charge', 'location', 'bail', 'immeuble', 'coworking', 'bureau']
+    keywords: ['loyer', 'charge', 'location', 'bail', 'immeuble', 'coworking']
   },
   'Assurances': {
     type: 'expense',
@@ -36,7 +36,7 @@ const CATEGORY_KEYWORDS: Record<string, { keywords: string[]; type: 'income' | '
   },
   'Frais bancaires': {
     type: 'expense',
-    keywords: ['banque', 'frais bancaire', 'commission', 'agios', 'crédit mutuel', 'bnpparibas', 'lcl', 'sg', 'société générale', 'caisse d\'épargne', 'banque populaire', 'blank', 'qonto', 'shine']
+    keywords: ['banque', 'frais bancaire', 'commission', 'agios', 'crédit mutuel', 'bnpparibas', 'lcl', 'sg ', 'société générale', 'caisse d\'épargne', 'banque populaire', 'blank', 'qonto', 'shine']
   },
   'Frais de déplacement': {
     type: 'expense',
@@ -52,11 +52,11 @@ const CATEGORY_KEYWORDS: Record<string, { keywords: string[]; type: 'income' | '
   },
   'Honoraires (comptable, avocat)': {
     type: 'expense',
-    keywords: ['comptable', 'expert-comptable', 'avocat', 'notaire', 'huissier', 'juridique', 'dougs', 'indy', 'shine', 'legalplace']
+    keywords: ['comptable', 'expert-comptable', 'avocat', 'notaire', 'huissier', 'juridique', 'dougs', 'indy', 'legalplace']
   },
   'Materiel informatique': {
     type: 'expense',
-    keywords: ['apple', 'macbook', 'imac', 'dell', 'hp ', 'lenovo', 'asus', 'acer', 'ordinateur', 'laptop', 'pc ', 'écran', 'souris', 'clavier', 'webcam', 'casque', 'usb', 'disque dur', 'ssd', 'ram', 'imprimante', 'canon', 'epson', 'hp']
+    keywords: ['apple', 'macbook', 'imac', 'dell', 'hp ', 'lenovo', 'asus', 'acer', 'ordinateur', 'laptop', 'pc ', 'écran', 'souris', 'clavier', 'webcam', 'casque', 'usb', 'disque dur', 'ssd', 'ram', 'imprimante', 'canon', 'epson']
   },
   'Repas professionnels': {
     type: 'expense',
@@ -88,25 +88,20 @@ const CATEGORY_KEYWORDS: Record<string, { keywords: string[]; type: 'income' | '
 function extractPattern(description: string): string {
   const desc = description.toLowerCase().trim()
   
-  // Remove common prefixes/suffixes
-  let pattern = desc
-    .replace(/^\*\s*/, '')
-    .replace(/\s*\*$/, '')
-  
   // For patterns like "VENDOR* Something", extract "vendor*"
-  const starMatch = pattern.match(/^([a-z0-9._-]+\*[a-z0-9._-]*)/)
+  const starMatch = desc.match(/^([a-z0-9._-]+\*[a-z0-9._-]*)/)
   if (starMatch) {
     return starMatch[1]
   }
   
   // For domain patterns like "vendor.com" or "vendor.net"
-  const domainMatch = pattern.match(/([a-z0-9-]+\.[a-z0-9-]+)/)
+  const domainMatch = desc.match(/([a-z0-9-]+\.[a-z0-9-]+)/)
   if (domainMatch) {
     return domainMatch[1]
   }
   
-  // For card payments like "vendor city country"
-  const parts = pattern.split(/\s+/)
+  // For card payments like "vendor city country", extract first word
+  const parts = desc.split(/\s+/)
   if (parts.length >= 1) {
     // Return first significant word (at least 3 chars)
     for (const part of parts) {
@@ -117,12 +112,14 @@ function extractPattern(description: string): string {
   }
   
   // Fallback: return first 20 chars
-  return pattern.substring(0, 20)
+  return desc.substring(0, 20)
 }
 
 // Auto-categorize transactions
 export async function POST(request: NextRequest) {
   try {
+    console.log('=== AUTO-CATEGORIZE START ===')
+    
     // Get all uncategorized transactions
     const uncategorized = await db.transaction.findMany({
       where: {
@@ -133,14 +130,17 @@ export async function POST(request: NextRequest) {
       },
     })
     
+    console.log(`Found ${uncategorized.length} uncategorized transactions`)
+    
     // Get all categories
     const categories = await db.category.findMany()
-    const categoryMap = new Map(categories.map(c => [c.name.toLowerCase(), c]))
+    console.log(`Found ${categories.length} categories`)
     
     // Get all learned rules
     const rules = await db.categoryRule.findMany({
       orderBy: { matchCount: 'desc' }
     })
+    console.log(`Found ${rules.length} learned rules`)
     
     // Get previously categorized transactions for learning
     const categorized = await db.transaction.findMany({
@@ -154,6 +154,7 @@ export async function POST(request: NextRequest) {
         type: true,
       }
     })
+    console.log(`Found ${categorized.length} already categorized transactions`)
     
     // Build a map of patterns to categories from existing transactions
     const existingPatterns = new Map<string, { categoryId: string; type: string }>()
@@ -163,16 +164,17 @@ export async function POST(request: NextRequest) {
         existingPatterns.set(pattern, { categoryId: t.categoryId!, type: t.type })
       }
     }
+    console.log(`Built ${existingPatterns.size} patterns from existing transactions`)
     
-    let categorized_count = 0
+    let categorizedCount = 0
     const results: Array<{ id: string; description: string; category: string; source: string }> = []
     
     for (const transaction of uncategorized) {
       const description = transaction.description.toLowerCase()
       const transactionType = transaction.amount >= 0 ? 'income' : 'expense'
+      const pattern = extractPattern(transaction.description)
       
       let bestMatch: { categoryId: string; source: string } | null = null
-      const pattern = extractPattern(transaction.description)
       
       // 1. First check learned rules (highest priority)
       for (const rule of rules) {
@@ -187,6 +189,7 @@ export async function POST(request: NextRequest) {
               lastUsed: new Date()
             }
           })
+          console.log(`Rule match: "${rule.pattern}" -> category ${rule.categoryId}`)
           break
         }
       }
@@ -194,29 +197,29 @@ export async function POST(request: NextRequest) {
       // 2. Check patterns from existing categorized transactions
       if (!bestMatch) {
         for (const [pat, data] of existingPatterns) {
-          if (description.includes(pat) && data.type === transactionType) {
-            const category = categories.find(c => c.id === data.categoryId)
-            if (category) {
-              bestMatch = { categoryId: data.categoryId, source: 'existing_pattern' }
-              // Save this as a learned rule for future use
-              try {
-                await db.categoryRule.upsert({
-                  where: { pattern: pat },
-                  create: {
-                    pattern: pat,
-                    categoryId: data.categoryId,
-                    transactionType: data.type,
-                  },
-                  update: {
-                    matchCount: { increment: 1 },
-                    lastUsed: new Date()
-                  }
-                })
-              } catch (e) {
-                // Ignore upsert errors
-              }
-              break
+        if (description.includes(pat) && data.type === transactionType) {
+          const category = categories.find(c => c.id === data.categoryId)
+          if (category) {
+            bestMatch = { categoryId: data.categoryId, source: 'existing_pattern' }
+            // Save this as a learned rule for future use
+            try {
+              await db.categoryRule.upsert({
+                where: { pattern: pat },
+                create: {
+                  pattern: pat,
+                  categoryId: data.categoryId,
+                  transactionType: data.type,
+                },
+                update: {
+                  matchCount: { increment: 1 },
+                  lastUsed: new Date()
+                }
+              })
+              console.log(`Saved new rule: "${pat}" -> ${data.categoryId}`)
+            } catch (e) {
+              // Ignore upsert errors
             }
+            break
           }
         }
       }
@@ -226,32 +229,29 @@ export async function POST(request: NextRequest) {
         for (const [categoryName, config] of Object.entries(CATEGORY_KEYWORDS)) {
           if (config.type !== transactionType) continue
           
-          let score = 0
           for (const keyword of config.keywords) {
             if (description.includes(keyword.toLowerCase())) {
-              score += keyword.length
-            }
-          }
-          
-          if (score > 0) {
-            const category = categoryMap.get(categoryName.toLowerCase())
-            if (category) {
-              bestMatch = { categoryId: category.id, source: 'keyword' }
-              // Save this as a learned rule
-              try {
-                await db.categoryRule.create({
-                  data: {
-                    pattern: pattern,
-                    categoryId: category.id,
-                    transactionType: transactionType,
-                  }
-                })
-              } catch (e) {
-                // Pattern might already exist
+              const category = categories.find(c => c.name.toLowerCase() === categoryName.toLowerCase())
+              if (category) {
+                bestMatch = { categoryId: category.id, source: 'keyword' }
+                // Save this as a learned rule
+                try {
+                  await db.categoryRule.create({
+                    data: {
+                      pattern: pattern,
+                      categoryId: category.id,
+                      transactionType: transactionType,
+                    }
+                  })
+                  console.log(`Created keyword rule: "${pattern}" -> ${category.name}`)
+                } catch (e) {
+                  // Pattern might already exist
+                }
+                break
               }
-              break
             }
           }
+          if (bestMatch) break
         }
       }
       
@@ -267,22 +267,26 @@ export async function POST(request: NextRequest) {
               labeled: true,
             },
           })
-          categorized_count++
-          results.push({
-            id: transaction.id,
-            description: transaction.description.substring(0, 50),
-            category: category.name,
-            source: bestMatch.source,
-          })
+          categorizedCount++
+          if (results.length < 50) {
+            results.push({
+              id: transaction.id,
+              description: transaction.description.substring(0, 50),
+              category: category.name,
+              source: bestMatch.source,
+            })
+          }
         }
       }
     }
     
+    console.log(`=== AUTO-CATEGORIZE COMPLETE: ${categorizedCount} categorized ===`)
+    
     return NextResponse.json({
       success: true,
-      categorized: categorized_count,
+      categorized: categorizedCount,
       total: uncategorized.length,
-      results: results.slice(0, 50),
+      results,
     })
   } catch (error) {
     console.error('Auto-categorize error:', error)

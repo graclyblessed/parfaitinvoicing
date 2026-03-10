@@ -109,6 +109,8 @@ export default function TaxDashboard() {
   const [autoCategorizing, setAutoCategorizing] = useState(false)
   const [uploadingReceiptFor, setUploadingReceiptFor] = useState<string | null>(null)
   const [showReceiptModal, setShowReceiptModal] = useState<{ id: string; url: string; name: string } | null>(null)
+  const [currentPage, setCurrentPage] = useState(1)
+  const itemsPerPage = 100
 
   // Fetch initial data
   useEffect(() => {
@@ -161,6 +163,13 @@ export default function TaxDashboard() {
   const totalExpenses = Math.abs(transactions.filter(t => t.amount < 0).reduce((sum, t) => sum + t.amount, 0))
   const netProfit = totalIncome - totalExpenses
   const unlabeledCount = transactions.filter(t => !t.labeled).length
+
+  // Pagination
+  const totalPages = Math.ceil(transactions.length / itemsPerPage)
+  const paginatedTransactions = transactions.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  )
 
   // Handle CSV upload
   const handleUpload = async () => {
@@ -801,7 +810,7 @@ export default function TaxDashboard() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {transactions.slice(0, 50).map((t) => (
+                      {paginatedTransactions.map((t) => (
                         <TableRow key={t.id} className={!t.labeled ? 'bg-amber-50/50' : ''}>
                           <TableCell className="font-mono text-sm">{formatDate(t.date)}</TableCell>
                           <TableCell className="max-w-xs truncate">{t.description}</TableCell>
@@ -894,6 +903,36 @@ export default function TaxDashboard() {
                       ))}
                     </TableBody>
                   </Table>
+                  
+                  {/* Pagination Controls */}
+                  {totalPages > 1 && (
+                    <div className="flex items-center justify-between mt-4 pt-4 border-t">
+                      <div className="text-sm text-muted-foreground">
+                        Affichage {((currentPage - 1) * itemsPerPage) + 1} - {Math.min(currentPage * itemsPerPage, transactions.length)} sur {transactions.length} transactions
+                      </div>
+                      <div className="flex gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                          disabled={currentPage === 1}
+                        >
+                          Précédent
+                        </Button>
+                        <span className="flex items-center px-3 text-sm">
+                          Page {currentPage} / {totalPages}
+                        </span>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                          disabled={currentPage === totalPages}
+                        >
+                          Suivant
+                        </Button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </CardContent>

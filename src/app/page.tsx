@@ -22,6 +22,7 @@ import {
 } from 'lucide-react'
 import { LiasseFiscaleSection } from '@/components/liasse-fiscale-section'
 import { DeclarationsSection } from '@/components/declarations-section'
+import { DevisSection } from '@/components/devis-section'
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from '@/components/ui/chart'
 import { Bar, BarChart, XAxis, YAxis, CartesianGrid, Line, LineChart as RechartsLineChart, ResponsiveContainer, Area, AreaChart } from 'recharts'
 
@@ -614,6 +615,7 @@ export default function TaxDashboard() {
           <TabsTrigger value="transactions">Transactions</TabsTrigger>
           <TabsTrigger value="deadlines">Échéances</TabsTrigger>
           <TabsTrigger value="invoices">Factures</TabsTrigger>
+          <TabsTrigger value="devis">Devis</TabsTrigger>
           <TabsTrigger value="liasse">Liasse Fiscale</TabsTrigger>
           <TabsTrigger value="declarations">Déclarations</TabsTrigger>
           <TabsTrigger value="settings">Paramètres</TabsTrigger>
@@ -1571,6 +1573,11 @@ export default function TaxDashboard() {
               )}
             </CardContent>
           </Card>
+        </TabsContent>
+
+        {/* Devis Tab */}
+        <TabsContent value="devis" className="space-y-6">
+          <DevisSection settings={settings} />
         </TabsContent>
 
         {/* Liasse Fiscale Tab */}

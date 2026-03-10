@@ -120,6 +120,31 @@ model Transaction {
   updatedAt       DateTime @updatedAt
 }
 
+// Devis (Quotes) created
+model Devis {
+  id              String   @id @default(cuid())
+  devisNumber     String   @unique
+  date            DateTime
+  validUntil      DateTime // Date de validité du devis
+  clientName      String
+  clientAddress   String?
+  clientSIRET     String?
+  clientTVAIntra  String?  // Numéro TVA intracommunautaire du client
+  clientEmail     String?  // For electronic sending
+  items           String   // JSON array of line items
+  subtotalHT      Float
+  tvaRate         Float    @default(20.0)
+  tvaAmount       Float
+  totalTTC        Float
+  status          String   @default("draft") // draft, sent, accepted, rejected, converted
+  notes           String?
+  sentAt          DateTime? // When devis was sent
+  acceptedAt      DateTime? // When devis was accepted
+  convertedToInvoiceId String? // Link to the created invoice
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
 // Invoices created
 model Invoice {
   id              String   @id @default(cuid())
@@ -129,7 +154,8 @@ model Invoice {
   clientName      String
   clientAddress   String?
   clientSIRET     String?
-  clientTVA       String?
+  clientTVAIntra  String?  // Numéro TVA intracommunautaire du client
+  clientEmail     String?  // For electronic sending
   items           String   // JSON array of line items
   subtotalHT      Float
   tvaRate         Float    @default(20.0)
@@ -138,6 +164,7 @@ model Invoice {
   status          String   @default("draft") // draft, sent, paid, cancelled
   paidAt          DateTime?
   notes           String?
+  devisId         String?  // Link to original devis if converted
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 }

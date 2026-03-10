@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import PDFDocument from 'pdfkit'
-import { PassThrough } from 'stream'
 
 // GET - List all invoices
 export async function GET() {
@@ -24,7 +22,8 @@ export async function POST(request: NextRequest) {
       clientName,
       clientAddress,
       clientSIRET,
-      clientTVA,
+      clientTVAIntra,
+      clientEmail,
       items,
       tvaRate,
       notes,
@@ -45,7 +44,8 @@ export async function POST(request: NextRequest) {
     const parsedItems = typeof items === 'string' ? JSON.parse(items) : items
     const subtotalHT = parsedItems.reduce((sum: number, item: { quantity: number; unitPrice: number }) => 
       sum + (item.quantity * item.unitPrice), 0)
-    const tvaAmount = subtotalHT * (tvaRate / 100)
+    const tvaRateValue = tvaRate || 20
+    const tvaAmount = subtotalHT * (tvaRateValue / 100)
     const totalTTC = subtotalHT + tvaAmount
 
     // Set due date to 30 days from now
@@ -60,10 +60,11 @@ export async function POST(request: NextRequest) {
         clientName,
         clientAddress: clientAddress || null,
         clientSIRET: clientSIRET || null,
-        clientTVA: clientTVA || null,
+        clientTVAIntra: clientTVAIntra || null,
+        clientEmail: clientEmail || null,
         items: JSON.stringify(parsedItems),
         subtotalHT,
-        tvaRate: tvaRate || 20,
+        tvaRate: tvaRateValue,
         tvaAmount,
         totalTTC,
         status: 'draft',

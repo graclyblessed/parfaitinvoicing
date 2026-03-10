@@ -84,7 +84,7 @@ const CATEGORY_KEYWORDS: Record<string, { keywords: string[]; type: 'income' | '
   },
 }
 
-// Extract pattern from description (e.g., "PADDLE.NET* VPSDIME Lisboa PRT" -> "paddle.net*")
+// Extract pattern from description
 function extractPattern(description: string): string {
   const desc = description.toLowerCase().trim()
   
@@ -103,7 +103,6 @@ function extractPattern(description: string): string {
   // For card payments like "vendor city country", extract first word
   const parts = desc.split(/\s+/)
   if (parts.length >= 1) {
-    // Return first significant word (at least 3 chars)
     for (const part of parts) {
       if (part.length >= 3 && !/^(the|for|and|via|par)$/i.test(part)) {
         return part
@@ -111,7 +110,6 @@ function extractPattern(description: string): string {
     }
   }
   
-  // Fallback: return first 20 chars
   return desc.substring(0, 20)
 }
 
@@ -181,7 +179,6 @@ export async function POST(request: NextRequest) {
         if (rule.transactionType === transactionType && 
             description.includes(rule.pattern.toLowerCase())) {
           bestMatch = { categoryId: rule.categoryId, source: 'learned_rule' }
-          // Update rule usage
           await db.categoryRule.update({
             where: { id: rule.id },
             data: { 
@@ -197,29 +194,29 @@ export async function POST(request: NextRequest) {
       // 2. Check patterns from existing categorized transactions
       if (!bestMatch) {
         for (const [pat, data] of existingPatterns) {
-        if (description.includes(pat) && data.type === transactionType) {
-          const category = categories.find(c => c.id === data.categoryId)
-          if (category) {
-            bestMatch = { categoryId: data.categoryId, source: 'existing_pattern' }
-            // Save this as a learned rule for future use
-            try {
-              await db.categoryRule.upsert({
-                where: { pattern: pat },
-                create: {
-                  pattern: pat,
-                  categoryId: data.categoryId,
-                  transactionType: data.type,
-                },
-                update: {
-                  matchCount: { increment: 1 },
-                  lastUsed: new Date()
-                }
-              })
-              console.log(`Saved new rule: "${pat}" -> ${data.categoryId}`)
-            } catch (e) {
-              // Ignore upsert errors
+          if (description.includes(pat) && data.type === transactionType) {
+            const category = categories.find(c => c.id === data.categoryId)
+            if (category) {
+              bestMatch = { categoryId: data.categoryId, source: 'existing_pattern' }
+              try {
+                await db.categoryRule.upsert({
+                  where: { pattern: pat },
+                  create: {
+                    pattern: pat,
+                    categoryId: data.categoryId,
+                    transactionType: data.type,
+                  },
+                  update: {
+                    matchCount: { increment: 1 },
+                    lastUsed: new Date()
+                  }
+                })
+                console.log(`Saved new rule: "${pat}" -> ${data.categoryId}`)
+              } catch (e) {
+                // Ignore upsert errors
+              }
+              break
             }
-            break
           }
         }
       }
@@ -234,7 +231,6 @@ export async function POST(request: NextRequest) {
               const category = categories.find(c => c.name.toLowerCase() === categoryName.toLowerCase())
               if (category) {
                 bestMatch = { categoryId: category.id, source: 'keyword' }
-                // Save this as a learned rule
                 try {
                   await db.categoryRule.create({
                     data: {

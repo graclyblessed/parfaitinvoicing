@@ -17,10 +17,13 @@ import {
   AlertCircle, Calendar, Upload, FileText, Settings, TrendingUp, 
   TrendingDown, Euro, Clock, CheckCircle, Plus, Download,
   Bell, Building2, Loader2, Receipt, PiggyBank, CreditCard,
-  ArrowUpRight, ArrowDownRight, Minus, Paperclip, X, Eye
+  ArrowUpRight, ArrowDownRight, Minus, Paperclip, X, Eye,
+  BarChart3, LineChart, PieChart, Wallet, Percent
 } from 'lucide-react'
 import { LiasseFiscaleSection } from '@/components/liasse-fiscale-section'
 import { DeclarationsSection } from '@/components/declarations-section'
+import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from '@/components/ui/chart'
+import { Bar, BarChart, XAxis, YAxis, CartesianGrid, Line, LineChart as RechartsLineChart, ResponsiveContainer, Area, AreaChart } from 'recharts'
 
 // Types
 interface Transaction {
@@ -217,6 +220,67 @@ export default function TaxDashboard() {
   const netProfit = totalIncome - totalExpenses
   const unlabeledCount = transactions.filter(t => !t.labeled).length
   const filteredUnlabeledCount = filteredTransactions.filter(t => !t.labeled).length
+
+  // Calculate monthly data for charts
+  const getMonthlyData = () => {
+    const months: { [key: string]: { month: string; ca: number; charges: number; resultat: number; tresorerie: number } } = {}
+    const monthNames = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin', 'Juil', 'Août', 'Sep', 'Oct', 'Nov', 'Déc']
+    
+    filteredTransactions.forEach(t => {
+      const date = new Date(t.date)
+      const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
+      const monthLabel = monthNames[date.getMonth()]
+      
+      if (!months[monthKey]) {
+        months[monthKey] = { month: monthLabel, ca: 0, charges: 0, resultat: 0, tresorerie: 0 }
+      }
+      
+      if (t.amount > 0) {
+        months[monthKey].ca += t.amount
+      } else {
+        months[monthKey].charges += Math.abs(t.amount)
+      }
+      months[monthKey].resultat = months[monthKey].ca - months[monthKey].charges
+    })
+    
+    // Calculate cumulative tresorerie
+    let cumulative = 0
+    const sortedMonths = Object.keys(months).sort()
+    sortedMonths.forEach(key => {
+      cumulative += months[key].resultat
+      months[key].tresorerie = cumulative
+    })
+    
+    return sortedMonths.map(key => months[key])
+  }
+
+  // Calculate charges breakdown by category
+  const getChargesBreakdown = () => {
+    const breakdown: { [key: string]: number } = {}
+    
+    filteredTransactions
+      .filter(t => t.amount < 0 && t.category)
+      .forEach(t => {
+        const catName = t.category!.name
+        breakdown[catName] = (breakdown[catName] || 0) + Math.abs(t.amount)
+      })
+    
+    return Object.entries(breakdown)
+      .map(([name, value]) => ({ name, value: Math.round(value * 100) / 100 }))
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 8) // Top 8 categories
+  }
+
+  const monthlyData = getMonthlyData()
+  const chargesBreakdown = getChargesBreakdown()
+
+  // Chart configs
+  const chartConfig = {
+    ca: { label: "Chiffre d'affaires", color: "#22C55E" },
+    charges: { label: "Charges", color: "#EF4444" },
+    resultat: { label: "Résultat", color: "#3B82F6" },
+    tresorerie: { label: "Trésorerie", color: "#8B5CF6" },
+  } satisfies ChartConfig
 
   // Pagination
   const totalPages = Math.ceil(transactions.length / itemsPerPage)
@@ -586,65 +650,291 @@ export default function TaxDashboard() {
             </CardContent>
           </Card>
 
-          {/* Stats Cards */}
+          {/* KPIs Financiers */}
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-            <Card>
+            <Card className="border-l-4 border-l-emerald-500">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Revenus</CardTitle>
+                <CardTitle className="text-sm font-medium text-muted-foreground">Chiffre d'affaires</CardTitle>
                 <TrendingUp className="h-4 w-4 text-emerald-500" />
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold text-emerald-600">{formatCurrency(totalIncome)}</div>
                 <p className="text-xs text-muted-foreground mt-1">
-                  {filteredTransactions.filter(t => t.amount > 0).length} transactions
+                  {filteredTransactions.filter(t => t.amount > 0).length} factures encaissées
                 </p>
               </CardContent>
             </Card>
 
-            <Card>
+            <Card className="border-l-4 border-l-red-500">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Dépenses</CardTitle>
+                <CardTitle className="text-sm font-medium text-muted-foreground">Charges d'exploitation</CardTitle>
                 <TrendingDown className="h-4 w-4 text-red-500" />
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold text-red-600">{formatCurrency(totalExpenses)}</div>
                 <p className="text-xs text-muted-foreground mt-1">
-                  {filteredTransactions.filter(t => t.amount < 0).length} transactions
+                  {filteredTransactions.filter(t => t.amount < 0).length} dépenses
                 </p>
               </CardContent>
             </Card>
 
-            <Card>
+            <Card className="border-l-4 border-l-blue-500">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Résultat Net</CardTitle>
-                <Euro className="h-4 w-4 text-muted-foreground" />
+                <CardTitle className="text-sm font-medium text-muted-foreground">Résultat d'exploitation</CardTitle>
+                <Euro className="h-4 w-4 text-blue-500" />
               </CardHeader>
               <CardContent>
                 <div className={`text-2xl font-bold ${netProfit >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
                   {formatCurrency(netProfit)}
                 </div>
                 <p className="text-xs text-muted-foreground mt-1">
-                  Base taxable: {formatCurrency(netProfit * 0.75)}
+                  Marge: {totalIncome > 0 ? ((netProfit / totalIncome) * 100).toFixed(1) : 0}%
                 </p>
               </CardContent>
             </Card>
 
-            <Card>
+            <Card className="border-l-4 border-l-purple-500">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">IS Estimé</CardTitle>
-                <PiggyBank className="h-4 w-4 text-blue-500" />
+                <CardTitle className="text-sm font-medium text-muted-foreground">Solde de trésorerie</CardTitle>
+                <Wallet className="h-4 w-4 text-purple-500" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold text-blue-600">
-                  {formatCurrency(calculateIS(netProfit))}
+                <div className="text-2xl font-bold text-purple-600">
+                  {formatCurrency(monthlyData.length > 0 ? monthlyData[monthlyData.length - 1].tresorerie : 0)}
                 </div>
                 <p className="text-xs text-muted-foreground mt-1">
-                  {netProfit > 42500 ? '15% + 25%' : '15%'}
+                  Cumul exercice
                 </p>
               </CardContent>
             </Card>
           </div>
 
+          {/* Charts Row 1: CA & Charges par mois */}
+          <div className="grid gap-6 lg:grid-cols-2">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <BarChart3 className="h-5 w-5 text-blue-500" />
+                  Chiffre d'affaires et Charges par mois
+                </CardTitle>
+                <CardDescription>Évolution mensuelle de votre activité</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {monthlyData.length > 0 ? (
+                  <ChartContainer config={chartConfig} className="h-[250px] w-full">
+                    <BarChart data={monthlyData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                      <XAxis dataKey="month" tickLine={false} axisLine={false} tick={{ fontSize: 11 }} />
+                      <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 11 }} tickFormatter={(v) => `${v}€`} />
+                      <ChartTooltip content={<ChartTooltipContent />} />
+                      <Bar dataKey="ca" name="ca" fill="#22C55E" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="charges" name="charges" fill="#EF4444" radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  </ChartContainer>
+                ) : (
+                  <div className="h-[250px] flex items-center justify-center text-muted-foreground">
+                    Aucune donnée pour cet exercice
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <LineChart className="h-5 w-5 text-purple-500" />
+                  Flux de trésorerie
+                </CardTitle>
+                <CardDescription>Évolution cumulée de votre trésorerie</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {monthlyData.length > 0 ? (
+                  <ChartContainer config={chartConfig} className="h-[250px] w-full">
+                    <AreaChart data={monthlyData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                      <XAxis dataKey="month" tickLine={false} axisLine={false} tick={{ fontSize: 11 }} />
+                      <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 11 }} tickFormatter={(v) => `${v}€`} />
+                      <ChartTooltip content={<ChartTooltipContent />} />
+                      <Area type="monotone" dataKey="tresorerie" name="tresorerie" stroke="#8B5CF6" fill="#8B5CF6" fillOpacity={0.2} strokeWidth={2} />
+                    </AreaChart>
+                  </ChartContainer>
+                ) : (
+                  <div className="h-[250px] flex items-center justify-center text-muted-foreground">
+                    Aucune donnée pour cet exercice
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Répartition des charges - BAR CHART */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <BarChart3 className="h-5 w-5 text-red-500" />
+                Répartition des charges
+              </CardTitle>
+              <CardDescription>Vos principales catégories de dépenses</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {chargesBreakdown.length > 0 ? (
+                <div className="space-y-3">
+                  {chargesBreakdown.map((item, index) => {
+                    const percentage = totalExpenses > 0 ? (item.value / totalExpenses) * 100 : 0
+                    const colors = ['#EF4444', '#F97316', '#EAB308', '#22C55E', '#06B6D4', '#3B82F6', '#8B5CF6', '#EC4899']
+                    return (
+                      <div key={item.name} className="space-y-1">
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="font-medium">{item.name}</span>
+                          <span className="text-muted-foreground">{formatCurrency(item.value)} ({percentage.toFixed(1)}%)</span>
+                        </div>
+                        <div className="h-3 bg-gray-100 rounded-full overflow-hidden">
+                          <div 
+                            className="h-full rounded-full transition-all duration-500"
+                            style={{ 
+                              width: `${percentage}%`, 
+                              backgroundColor: colors[index % colors.length] 
+                            }}
+                          />
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              ) : (
+                <div className="h-[200px] flex items-center justify-center text-muted-foreground">
+                  Aucune charge catégorisée
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Taxes & Impôts Section */}
+          <div className="grid gap-6 lg:grid-cols-2">
+            {/* TVA Section */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Percent className="h-5 w-5 text-amber-500" />
+                  Suivi de votre TVA
+                </CardTitle>
+                <CardDescription>
+                  {settings?.vatRegime === 'franchise' 
+                    ? 'Vous êtes en franchise en base de TVA' 
+                    : 'Régime de TVA simplifié'}
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {settings?.vatRegime === 'franchise' ? (
+                  <div className="space-y-4">
+                    <Alert className="border-emerald-200 bg-emerald-50">
+                      <CheckCircle className="h-4 w-4 text-emerald-600" />
+                      <AlertDescription className="text-emerald-800">
+                        <strong>Franchise en base</strong> - Pas de TVA à déclarer
+                      </AlertDescription>
+                    </Alert>
+                    <div className="space-y-2 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Seuil prestations 2025</span>
+                        <span className="font-medium">37 500 €</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Votre CA actuel</span>
+                        <span className="font-medium text-emerald-600">{formatCurrency(totalIncome)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Marge restante</span>
+                        <span className="font-medium text-blue-600">{formatCurrency(Math.max(0, 37500 - totalIncome))}</span>
+                      </div>
+                    </div>
+                    <Progress value={(totalIncome / 37500) * 100} className="h-2" />
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="p-3 bg-red-50 rounded-lg">
+                        <p className="text-xs text-muted-foreground">TVA collectée</p>
+                        <p className="text-lg font-bold text-red-600">{formatCurrency(0)}</p>
+                      </div>
+                      <div className="p-3 bg-green-50 rounded-lg">
+                        <p className="text-xs text-muted-foreground">TVA déductible</p>
+                        <p className="text-lg font-bold text-green-600">{formatCurrency(0)}</p>
+                      </div>
+                    </div>
+                    <Separator />
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm font-medium">TVA nette due</span>
+                      <span className="text-lg font-bold">{formatCurrency(0)}</span>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* IS Section */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <PiggyBank className="h-5 w-5 text-blue-500" />
+                  Suivi de votre Impôt sur les Sociétés (IS)
+                </CardTitle>
+                <CardDescription>L'IS est calculé à partir de vos bénéfices</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="p-3 bg-blue-50 rounded-lg">
+                      <p className="text-xs text-muted-foreground">Bénéfice fiscal</p>
+                      <p className={`text-lg font-bold ${netProfit >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                        {formatCurrency(netProfit)}
+                      </p>
+                    </div>
+                    <div className="p-3 bg-purple-50 rounded-lg">
+                      <p className="text-xs text-muted-foreground">IS estimé</p>
+                      <p className="text-lg font-bold text-purple-600">{formatCurrency(calculateIS(netProfit))}</p>
+                    </div>
+                  </div>
+                  
+                  <Separator />
+                  
+                  <div className="space-y-2">
+                    <p className="text-sm font-medium">Prochains paiements d'IS</p>
+                    <div className="space-y-2 text-sm">
+                      {netProfit > 0 && (
+                        <>
+                          <div className="flex justify-between items-center p-2 bg-muted rounded">
+                            <span>Acompte Q1 (15 mars)</span>
+                            <span className="font-mono">{formatCurrency(calculateIS(netProfit) / 4)}</span>
+                          </div>
+                          <div className="flex justify-between items-center p-2 bg-muted rounded">
+                            <span>Acompte Q2 (15 juin)</span>
+                            <span className="font-mono">{formatCurrency(calculateIS(netProfit) / 4)}</span>
+                          </div>
+                          <div className="flex justify-between items-center p-2 bg-muted rounded">
+                            <span>Acompte Q3 (15 sept.)</span>
+                            <span className="font-mono">{formatCurrency(calculateIS(netProfit) / 4)}</span>
+                          </div>
+                          <div className="flex justify-between items-center p-2 bg-muted rounded">
+                            <span>Acompte Q4 (15 déc.)</span>
+                            <span className="font-mono">{formatCurrency(calculateIS(netProfit) / 4)}</span>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="p-3 bg-blue-50 rounded-lg text-sm">
+                    <p className="font-medium text-blue-800">Barème IS 2025</p>
+                    <p className="text-blue-700 text-xs mt-1">
+                      15% jusqu'à 42 500 € de bénéfice, puis 25% au-delà
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Prochaines échéances & Actions rapides */}
           <div className="grid gap-6 md:grid-cols-2">
             {/* Upcoming Deadlines */}
             <Card>
@@ -723,78 +1013,20 @@ export default function TaxDashboard() {
                   </div>
                 </Button>
 
-                <Button variant="outline" className="justify-start h-auto py-4" onClick={() => setActiveTab('settings')}>
+                <Button variant="outline" className="justify-start h-auto py-4" onClick={() => setActiveTab('liasse')}>
                   <div className="flex items-center gap-3">
                     <div className="p-2 bg-purple-100 rounded-lg">
-                      <Building2 className="h-4 w-4 text-purple-600" />
+                      <FileText className="h-4 w-4 text-purple-600" />
                     </div>
                     <div className="text-left">
-                      <p className="font-medium">Paramètres entreprise</p>
-                      <p className="text-xs text-muted-foreground">Configurer vos informations</p>
+                      <p className="font-medium">Générer la Liasse Fiscale</p>
+                      <p className="text-xs text-muted-foreground">Préparer votre déclaration annuelle</p>
                     </div>
                   </div>
                 </Button>
               </CardContent>
             </Card>
           </div>
-
-          {/* IS Breakdown */}
-          {netProfit > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Détail de l'Impôt sur les Sociétés</CardTitle>
-                <CardDescription>Calcul selon le barème progressif</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm">Bénéfice fiscal estimé</span>
-                    <span className="font-mono">{formatCurrency(netProfit * 0.75)}</span>
-                  </div>
-                  <Separator />
-                  
-                  {netProfit > 42500 ? (
-                    <>
-                      <div className="flex justify-between items-center text-sm">
-                        <div className="flex items-center gap-2">
-                          <Badge variant="outline">15%</Badge>
-                          <span>Tranche 0 - 42 500 €</span>
-                        </div>
-                        <span className="font-mono">{formatCurrency(42500 * 0.15)}</span>
-                      </div>
-                      <div className="flex justify-between items-center text-sm">
-                        <div className="flex items-center gap-2">
-                          <Badge variant="outline">25%</Badge>
-                          <span>Tranche &gt; 42 500 €</span>
-                        </div>
-                        <span className="font-mono">{formatCurrency((netProfit - 42500) * 0.25)}</span>
-                      </div>
-                      <Separator />
-                      <div className="flex justify-between items-center font-medium">
-                        <span>Total IS estimé</span>
-                        <span className="font-mono text-lg text-blue-600">{formatCurrency(calculateIS(netProfit))}</span>
-                      </div>
-                    </>
-                  ) : (
-                    <>
-                      <div className="flex justify-between items-center text-sm">
-                        <div className="flex items-center gap-2">
-                          <Badge variant="outline">15%</Badge>
-                          <span>Taux réduit PME</span>
-                        </div>
-                        <span className="font-mono">{formatCurrency(netProfit * 0.15)}</span>
-                      </div>
-                      <Separator />
-                      <div className="flex justify-between items-center font-medium">
-                        <span>Total IS estimé</span>
-                        <span className="font-mono text-lg text-blue-600">{formatCurrency(calculateIS(netProfit))}</span>
-                      </div>
-                    </>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          )}
         </TabsContent>
 
         {/* Transactions Tab */}

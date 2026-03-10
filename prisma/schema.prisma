@@ -74,6 +74,7 @@ model Settings {
   companySIRET    String
   companySIREN    String
   companyTVA      String?
+  presidentName   String?  // Nom du président de la SASU
   vatRegime       String   @default("franchise") // franchise, reel_simplifie, reel_normal
   fiscalYearStart Int      @default(1)  // Month (1 = January)
   fiscalYearEnd   Int      @default(12) // Month (12 = December)

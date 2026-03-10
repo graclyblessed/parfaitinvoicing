@@ -66,6 +66,7 @@ interface Settings {
   companySIRET: string
   companySIREN: string
   companyTVA: string | null
+  presidentName: string | null
   vatRegime: string
   email: string
 }
@@ -432,6 +433,7 @@ export default function TaxDashboard() {
           companySIRET: formData.get('companySIRET'),
           companySIREN: formData.get('companySIREN'),
           companyTVA: formData.get('companyTVA'),
+          presidentName: formData.get('presidentName'),
           vatRegime: formData.get('vatRegime'),
           email: formData.get('email'),
         }),
@@ -1626,6 +1628,16 @@ export default function TaxDashboard() {
                       defaultValue={settings?.companyTVA || ''} 
                       placeholder="FR XX XXXXXXXXX"
                     />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="presidentName">Nom du président</Label>
+                    <Input 
+                      id="presidentName" 
+                      name="presidentName"
+                      defaultValue={settings?.presidentName || ''} 
+                      placeholder="Jean Dupont"
+                    />
+                    <p className="text-xs text-muted-foreground">Requis pour la liasse fiscale</p>
                   </div>
                 </div>
                 

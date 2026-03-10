@@ -44,6 +44,9 @@ export async function GET(
          .text(settings.companyName, { align: 'left' })
          .text(`SIRET: ${settings.companySIRET}`, { align: 'left' })
          .text(settings.companyAddress, { align: 'left' })
+      if (settings.presidentName) {
+         doc.text(`Président: ${settings.presidentName}`, { align: 'left' })
+      }
       doc.moveDown(1)
     }
 
@@ -238,8 +241,37 @@ export async function GET(
       { label: 'IS à payer (15% jusqu\'à 42 500 €, 25% au-delà)', value: liasse.isAPayer, bold: true },
     ])
 
-    // Footer on last page
+    // Footer on last page - Signature
     doc.moveDown(2)
+    
+    // Signature block
+    doc.fontSize(10).font('Helvetica-Bold')
+       .text('ATTESTATION ET SIGNATURE', { align: 'center' })
+    doc.moveDown(0.5)
+    
+    const signatureDate = new Date()
+    doc.fontSize(9).font('Helvetica')
+       .text(`Fait à ${settings?.companyAddress?.split('\n').pop() || 'Paris'}, le ${signatureDate.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}`, { align: 'center' })
+    doc.moveDown(1)
+    
+    doc.text('Je soussigné(e),', { align: 'center' })
+    doc.moveDown(0.3)
+    doc.font('Helvetica-Bold')
+       .text(settings?.presidentName || 'Le Président', { align: 'center' })
+    doc.moveDown(0.3)
+    doc.font('Helvetica')
+       .text('Président de ' + (settings?.companyName || 'la société'), { align: 'center' })
+    doc.moveDown(1)
+    
+    doc.text('Atteste sur l\'honneur l\'exactitude des renseignements portés dans la présente liasse fiscale.', { align: 'center' })
+    doc.moveDown(2)
+    
+    // Signature line
+    doc.text('Signature', { align: 'right' })
+    doc.moveDown(1)
+    doc.rect(400, doc.y, 150, 40).stroke()
+    
+    doc.moveDown(3)
     doc.fontSize(8).font('Helvetica-Oblique')
        .text('Ce document est généré automatiquement par Parfait Invoicing.', { align: 'center' })
        .text('Il doit être vérifié et validé avant toute soumission à l\'administration fiscale.', { align: 'center' })

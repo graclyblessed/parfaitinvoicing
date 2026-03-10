@@ -5,20 +5,9 @@ import GoogleProvider from 'next-auth/providers/google'
 import bcrypt from 'bcryptjs'
 import { db } from './db'
 
-// Generate a secret for development (NOT for production)
-const getSecret = () => {
-  if (process.env.NEXTAUTH_SECRET) {
-    return process.env.NEXTAUTH_SECRET
-  }
-  // In production without NEXTAUTH_SECRET, we need to fail gracefully
-  if (process.env.NODE_ENV === 'production') {
-    console.error('NEXTAUTH_SECRET is required in production!')
-    // Return a placeholder that will cause auth to fail safely
-    return 'MISSING_SECRET_PLEASE_SET_NEXTAUTH_SECRET'
-  }
-  // Development fallback
-  return 'development-secret-do-not-use-in-production'
-}
+// Secret for JWT signing - use env var or fallback
+// NOTE: In production, always set NEXTAUTH_SECRET environment variable for security
+const AUTH_SECRET = process.env.NEXTAUTH_SECRET || 'IJFdPIkWdnzjRfMlocWsCWkagDUQ2R/SlVx2xLn8jM8='
 
 export const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(db) as any,
@@ -34,7 +23,10 @@ export const authOptions: NextAuthOptions = {
         password: { label: 'Password', type: 'password' },
       },
       async authorize(credentials) {
+        console.log('Authorize called for:', credentials?.email)
+        
         if (!credentials?.email || !credentials?.password) {
+          console.log('Missing credentials')
           return null
         }
 
@@ -42,11 +34,15 @@ export const authOptions: NextAuthOptions = {
           where: { email: credentials.email },
         })
 
+        console.log('User found:', user ? user.email : 'not found')
+
         if (!user || !user.password) {
+          console.log('No user or no password')
           return null
         }
 
         const passwordMatch = await bcrypt.compare(credentials.password, user.password)
+        console.log('Password match:', passwordMatch)
 
         if (!passwordMatch) {
           return null
@@ -81,6 +77,8 @@ export const authOptions: NextAuthOptions = {
       return session
     },
     async signIn({ user, account }) {
+      console.log('SignIn callback:', { email: user.email, provider: account?.provider })
+      
       // SINGLE-USER MODE: Check if any user already exists
       const userCount = await db.user.count()
       
@@ -93,7 +91,7 @@ export const authOptions: NextAuthOptions = {
         
         // If no existing user and there's already a user, block
         if (!existingUser && userCount > 0) {
-          return false // This will redirect back to login with error
+          return false
         }
       }
       
@@ -113,5 +111,6 @@ export const authOptions: NextAuthOptions = {
       return true
     },
   },
-  secret: getSecret(),
+  secret: AUTH_SECRET,
+  debug: process.env.NODE_ENV === 'development',
 }

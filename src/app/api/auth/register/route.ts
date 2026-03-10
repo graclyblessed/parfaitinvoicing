@@ -6,8 +6,10 @@ export async function POST(request: NextRequest) {
   try {
     // SINGLE-USER MODE: Check if any user already exists
     const userCount = await db.user.count()
+    console.log('Current user count:', userCount)
     
     if (userCount > 0) {
+      console.log('Registration blocked - user already exists')
       return NextResponse.json(
         { error: 'Les inscriptions sont désactivées. Cette application est en mode mono-utilisateur.' },
         { status: 403 }
@@ -15,6 +17,7 @@ export async function POST(request: NextRequest) {
     }
 
     const { name, email, password } = await request.json()
+    console.log('Registration attempt for:', email)
 
     if (!email || !password) {
       return NextResponse.json(
@@ -36,6 +39,7 @@ export async function POST(request: NextRequest) {
     })
 
     if (existingUser) {
+      console.log('User already exists with email:', email)
       return NextResponse.json(
         { error: 'Un compte existe déjà avec cet email' },
         { status: 400 }
@@ -44,6 +48,7 @@ export async function POST(request: NextRequest) {
 
     // Hash password
     const hashedPassword = await bcrypt.hash(password, 10)
+    console.log('Password hashed successfully')
 
     // Create user
     const user = await db.user.create({
@@ -53,6 +58,7 @@ export async function POST(request: NextRequest) {
         password: hashedPassword,
       },
     })
+    console.log('User created:', user.id, user.email)
 
     // Check if there's an existing settings record without a user (for migration)
     const existingSettings = await db.settings.findFirst({
@@ -65,6 +71,7 @@ export async function POST(request: NextRequest) {
         where: { id: existingSettings.id },
         data: { userId: user.id },
       })
+      console.log('Linked existing settings to user')
     } else {
       // Create default settings for the user
       await db.settings.create({
@@ -77,6 +84,7 @@ export async function POST(request: NextRequest) {
           email: email,
         },
       })
+      console.log('Created new settings for user')
     }
 
     return NextResponse.json({

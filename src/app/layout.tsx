@@ -1,11 +1,8 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
-import { Suspense } from "react";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
-import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
-import { AppSidebar } from "@/components/app-sidebar";
-import { SiteHeader } from "@/components/site-header";
+import { AuthProvider } from "@/components/auth-provider";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -37,17 +34,9 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased bg-background text-foreground`}
       >
-        <SidebarProvider>
-          <Suspense fallback={<div className="w-[var(--sidebar-width)]" />}>
-            <AppSidebar />
-          </Suspense>
-          <SidebarInset>
-            <SiteHeader />
-            <main className="flex-1">
-              {children}
-            </main>
-          </SidebarInset>
-        </SidebarProvider>
+        <AuthProvider>
+          {children}
+        </AuthProvider>
         <Toaster />
       </body>
     </html>

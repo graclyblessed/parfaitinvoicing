@@ -821,7 +821,7 @@ export default function TaxDashboard() {
                 <CardDescription>
                   {settings?.vatRegime === 'franchise' 
                     ? 'Vous êtes en franchise en base de TVA' 
-                    : 'Régime de TVA simplifié'}
+                    : 'Régime de TVA simplifié - Déclaration CA12 annuelle'}
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -851,20 +851,52 @@ export default function TaxDashboard() {
                   </div>
                 ) : (
                   <div className="space-y-4">
+                    <Alert className="border-amber-200 bg-amber-50">
+                      <AlertCircle className="h-4 w-4 text-amber-600" />
+                      <AlertDescription className="text-amber-800">
+                        <strong>Régime simplifié</strong> - TVA à déclarer annuellement via CA12
+                      </AlertDescription>
+                    </Alert>
+                    
                     <div className="grid grid-cols-2 gap-4">
                       <div className="p-3 bg-red-50 rounded-lg">
-                        <p className="text-xs text-muted-foreground">TVA collectée</p>
-                        <p className="text-lg font-bold text-red-600">{formatCurrency(0)}</p>
+                        <p className="text-xs text-muted-foreground">TVA collectée (20%)</p>
+                        <p className="text-lg font-bold text-red-600">{formatCurrency(totalIncome * 0.20)}</p>
+                        <p className="text-xs text-muted-foreground mt-1">Sur {formatCurrency(totalIncome)} HT</p>
                       </div>
                       <div className="p-3 bg-green-50 rounded-lg">
                         <p className="text-xs text-muted-foreground">TVA déductible</p>
-                        <p className="text-lg font-bold text-green-600">{formatCurrency(0)}</p>
+                        <p className="text-lg font-bold text-green-600">{formatCurrency(totalExpenses * 0.20)}</p>
+                        <p className="text-xs text-muted-foreground mt-1">Sur {formatCurrency(totalExpenses)} HT</p>
                       </div>
                     </div>
+                    
                     <Separator />
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm font-medium">TVA nette due</span>
-                      <span className="text-lg font-bold">{formatCurrency(0)}</span>
+                    
+                    <div className="flex justify-between items-center p-3 bg-muted rounded-lg">
+                      <span className="text-sm font-medium">TVA nette à payer</span>
+                      <span className="text-lg font-bold text-amber-600">
+                        {formatCurrency(Math.max(0, (totalIncome * 0.20) - (totalExpenses * 0.20)))}
+                      </span>
+                    </div>
+                    
+                    <div className="space-y-2">
+                      <p className="text-sm font-medium">Échéance CA12</p>
+                      <div className="flex justify-between items-center p-2 bg-amber-50 border border-amber-200 rounded">
+                        <span className="text-sm">Déclaration CA12</span>
+                        <Badge variant="outline" className="bg-amber-100">
+                          {(() => {
+                            const now = new Date()
+                            const currentYear = now.getFullYear()
+                            const deadline = new Date(currentYear + 1, 4, 3) // May 3rd of next year
+                            const days = Math.ceil((deadline.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
+                            return days > 0 ? `${days} jours` : 'À rendre'
+                          })()}
+                        </Badge>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        La déclaration CA12 couvre l'année civile précédente et doit être déposée avant le 3 mai.
+                      </p>
                     </div>
                   </div>
                 )}

@@ -5,6 +5,21 @@ import GoogleProvider from 'next-auth/providers/google'
 import bcrypt from 'bcryptjs'
 import { db } from './db'
 
+// Generate a secret for development (NOT for production)
+const getSecret = () => {
+  if (process.env.NEXTAUTH_SECRET) {
+    return process.env.NEXTAUTH_SECRET
+  }
+  // In production without NEXTAUTH_SECRET, we need to fail gracefully
+  if (process.env.NODE_ENV === 'production') {
+    console.error('NEXTAUTH_SECRET is required in production!')
+    // Return a placeholder that will cause auth to fail safely
+    return 'MISSING_SECRET_PLEASE_SET_NEXTAUTH_SECRET'
+  }
+  // Development fallback
+  return 'development-secret-do-not-use-in-production'
+}
+
 export const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(db) as any,
   providers: [
@@ -82,5 +97,5 @@ export const authOptions: NextAuthOptions = {
       return true
     },
   },
-  secret: process.env.NEXTAUTH_SECRET,
+  secret: getSecret(),
 }

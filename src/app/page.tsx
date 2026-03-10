@@ -1578,7 +1578,7 @@ export default function TaxDashboard() {
 
         {/* Declarations Tab - TVA & IS */}
         <TabsContent value="declarations" className="space-y-6">
-          <DeclarationsSection settings={settings} liasse={null} />
+          <DeclarationsSection settings={settings} />
         </TabsContent>
 
         {/* Settings Tab */}

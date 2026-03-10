@@ -54,7 +54,6 @@ interface Declaration {
 
 interface DeclarationsSectionProps {
   settings: Settings | null
-  liasse: LiasseData | null
 }
 
 // IS Acomptes dates for a fiscal year ending November 30
@@ -73,25 +72,44 @@ function getTVACA12Date(fyEndYear: number): Date {
   return new Date(fyEndYear + 1, 4, 3) // May 3rd of following year
 }
 
-export function DeclarationsSection({ settings, liasse }: DeclarationsSectionProps) {
+export function DeclarationsSection({ settings }: DeclarationsSectionProps) {
   const [declarations, setDeclarations] = useState<Declaration[]>([])
+  const [liasses, setLiasses] = useState<LiasseData[]>([])
   const [loading, setLoading] = useState(false)
   const [activeTab, setActiveTab] = useState('is')
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear())
   const [uploadingDoc, setUploadingDoc] = useState<string | null>(null)
   const [showDocModal, setShowDocModal] = useState<{ url: string; name: string } | null>(null)
 
+  // Get liasse for the selected fiscal year
+  const selectedLiasse = liasses.find(l => l.year === selectedYear)
+  // Get liasse for previous fiscal year (for IS acomptes calculation)
+  const previousLiasse = liasses.find(l => l.year === selectedYear - 1)
+
   // Calculate IS acomptes based on previous year IS
-  const previousYearIS = liasse?.isAPayer || 0
+  const previousYearIS = previousLiasse?.isAPayer || 0
   const acompteAmount = previousYearIS > 0 ? Math.round((previousYearIS / 4) * 100) / 100 : 0
 
-  // TVA info
+  // TVA info from selected year's liasse
   const isFranchiseEnBase = settings?.vatRegime === 'franchise'
-  const tvaDue = liasse?.tvaDue || 0
+  const tvaCollectee = selectedLiasse?.tvaCollectee || 0
+  const tvaDeductible = selectedLiasse?.tvaDeductible || 0
+  const tvaDue = selectedLiasse?.tvaDue || 0
 
   useEffect(() => {
     fetchDeclarations()
+    fetchLiasses()
   }, [])
+
+  const fetchLiasses = async () => {
+    try {
+      const res = await fetch('/api/liasse')
+      const data = await res.json()
+      setLiasses(data.liasses || [])
+    } catch (error) {
+      console.error('Error fetching liasses:', error)
+    }
+  }
 
   const fetchDeclarations = async () => {
     setLoading(true)
@@ -227,14 +245,47 @@ export function DeclarationsSection({ settings, liasse }: DeclarationsSectionPro
   const isAcomptes = getISAcomptesDates(selectedYear)
   const today = new Date()
 
+  // Available years from liasses
+  const availableYears = liasses.map(l => l.year).sort((a, b) => b - a)
+  const yearOptions = [2026, 2025, 2024, 2023, 2022]
+
   return (
     <div className="space-y-6">
+      {/* Year Selector */}
+      <Card className="bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200">
+        <CardContent className="py-4">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div>
+              <h2 className="text-xl font-bold text-blue-900">Déclarations Fiscales</h2>
+              <p className="text-sm text-blue-700">
+                Gérez vos acomptes IS et déclarations TVA par exercice fiscal.
+              </p>
+            </div>
+            <div className="flex items-center gap-3">
+              <Label className="text-sm font-medium text-blue-800">Exercice:</Label>
+              <select
+                className="p-2 border rounded-md bg-white"
+                value={selectedYear}
+                onChange={(e) => setSelectedYear(parseInt(e.target.value))}
+              >
+                {yearOptions.map(y => (
+                  <option key={y} value={y}>30/11/{y}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Info alert */}
       <Alert>
         <Info className="h-4 w-4" />
         <AlertDescription>
           <strong>Exercice fiscal:</strong> Votre exercice clos le 30/11/{selectedYear}. 
           Les acomptes IS sont dus les 15 mars, 15 juin, 15 septembre et 15 décembre de l'année de clôture.
+          {!previousLiasse && (
+            <><br /><strong className="text-amber-600">⚠️ Aucune liasse trouvée pour l'exercice précédent (30/11/{selectedYear - 1}).</strong> Générez d'abord votre liasse fiscale pour calculer les acomptes.</>
+          )}
         </AlertDescription>
       </Alert>
 
@@ -255,13 +306,18 @@ export function DeclarationsSection({ settings, liasse }: DeclarationsSectionPro
                 Acomptes IS - Exercice {selectedYear}
               </CardTitle>
               <CardDescription>
-                Calculés sur la base de l'IS de l'exercice précédent
+                Calculés sur la base de l'IS de l'exercice précédent (30/11/{selectedYear - 1})
+                {previousLiasse ? (
+                  <span className="text-green-600 ml-2">✓ Liasse disponible</span>
+                ) : (
+                  <span className="text-amber-600 ml-2">⚠️ Liasse non générée</span>
+                )}
               </CardDescription>
             </CardHeader>
             <CardContent>
               <div className="grid md:grid-cols-3 gap-4 mb-6">
                 <div className="p-4 bg-muted rounded-lg">
-                  <p className="text-sm text-muted-foreground">IS exercice précédent</p>
+                  <p className="text-sm text-muted-foreground">IS exercice N-1 (30/11/{selectedYear - 1})</p>
                   <p className="text-2xl font-bold">{formatCurrency(previousYearIS)}</p>
                 </div>
                 <div className="p-4 bg-muted rounded-lg">
@@ -432,11 +488,11 @@ export function DeclarationsSection({ settings, liasse }: DeclarationsSectionPro
                   <div className="grid md:grid-cols-3 gap-4 mb-6">
                     <div className="p-4 bg-muted rounded-lg">
                       <p className="text-sm text-muted-foreground">TVA collectée</p>
-                      <p className="text-2xl font-bold text-red-600">{formatCurrency(liasse?.tvaCollectee || 0)}</p>
+                      <p className="text-2xl font-bold text-red-600">{formatCurrency(tvaCollectee)}</p>
                     </div>
                     <div className="p-4 bg-muted rounded-lg">
                       <p className="text-sm text-muted-foreground">TVA déductible</p>
-                      <p className="text-2xl font-bold text-green-600">{formatCurrency(liasse?.tvaDeductible || 0)}</p>
+                      <p className="text-2xl font-bold text-green-600">{formatCurrency(tvaDeductible)}</p>
                     </div>
                     <div className="p-4 bg-muted rounded-lg">
                       <p className="text-sm text-muted-foreground">TVA due</p>

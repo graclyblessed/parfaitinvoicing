@@ -1,6 +1,6 @@
-import Resend from 'resend'
+import { Resend } from 'resend'
 
-const resend = new Resend.Resend(process.env.RESEND_API_KEY)
+const resend = new Resend(process.env.RESEND_API_KEY)
 
 interface DeadlineReminder {
   name: string
@@ -222,7 +222,7 @@ export async function sendReminderEmail(data: EmailData): Promise<{ success: boo
 
     if (error) {
       console.error('Resend error:', error)
-      return { success: false, error: error.message }
+      return { success: false, error: typeof error === 'string' ? error : (error as Error).message || 'Unknown error' }
     }
 
     console.log('Email sent successfully:', result)

@@ -103,6 +103,7 @@ export default function TaxDashboard() {
   const [invoiceTvaRate, setInvoiceTvaRate] = useState(20)
   const [exporting, setExporting] = useState(false)
   const [selectedBank, setSelectedBank] = useState('blank') // Blank.app bank
+  const [autoCategorizing, setAutoCategorizing] = useState(false)
 
   // Fetch initial data
   useEffect(() => {
@@ -211,6 +212,28 @@ export default function TaxDashboard() {
       fetchAllData()
     } catch (error) {
       console.error('Error labeling transaction:', error)
+    }
+  }
+
+  // Auto-categorize transactions
+  const autoCategorize = async () => {
+    setAutoCategorizing(true)
+    try {
+      const res = await fetch('/api/transactions/auto-categorize', {
+        method: 'POST',
+      })
+      const data = await res.json()
+      if (data.success) {
+        alert(`${data.categorized} transactions catégorisées automatiquement sur ${data.total}`)
+        fetchAllData()
+      } else {
+        alert('Erreur: ' + (data.error || 'Erreur inconnue'))
+      }
+    } catch (error) {
+      console.error('Auto-categorize error:', error)
+      alert('Erreur de connexion')
+    } finally {
+      setAutoCategorizing(false)
     }
   }
 
@@ -682,14 +705,26 @@ export default function TaxDashboard() {
                     {transactions.length} transactions • {unlabeledCount} à catégoriser
                   </CardDescription>
                 </div>
-                <Button variant="outline" size="sm" onClick={exportToExcel} disabled={exporting}>
-                  {exporting ? (
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  ) : (
-                    <Download className="h-4 w-4 mr-2" />
+                <div className="flex gap-2">
+                  {unlabeledCount > 0 && (
+                    <Button variant="default" size="sm" onClick={autoCategorize} disabled={autoCategorizing}>
+                      {autoCategorizing ? (
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      ) : (
+                        <CheckCircle className="h-4 w-4 mr-2" />
+                      )}
+                      Auto-catégoriser
+                    </Button>
                   )}
-                  Exporter Excel
-                </Button>
+                  <Button variant="outline" size="sm" onClick={exportToExcel} disabled={exporting}>
+                    {exporting ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <Download className="h-4 w-4 mr-2" />
+                    )}
+                    Exporter Excel
+                  </Button>
+                </div>
               </div>
             </CardHeader>
             <CardContent>

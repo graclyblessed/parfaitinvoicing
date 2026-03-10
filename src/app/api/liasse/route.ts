@@ -1,7 +1,48 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { PrismaClient } from '@prisma/client'
+import { db } from '@/lib/db'
 
-const prisma = new PrismaClient()
+// Category to Liasse field mapping
+const CATEGORY_TO_LIASSE: Record<string, {
+  field: string
+  section: 'produit' | 'charge' | 'actif' | 'passif'
+  line2033?: string
+}> = {
+  // Income
+  'Prestations de services': { field: 'chiffreAffaires', section: 'produit', line2033: '2033-D A' },
+  'Ventes de produits': { field: 'chiffreAffaires', section: 'produit', line2033: '2033-D A' },
+  'Autres revenus': { field: 'autresProduits', section: 'produit', line2033: '2033-D E' },
+  
+  // Expenses - Services extérieurs
+  'Fournitures de bureau': { field: 'servicesExterieurs', section: 'charge', line2033: '2033-D G' },
+  'Logiciels & Abonnements': { field: 'servicesExterieurs', section: 'charge', line2033: '2033-D G' },
+  'Télécommunications': { field: 'servicesExterieurs', section: 'charge', line2033: '2033-D G' },
+  'Frais bancaires': { field: 'servicesExterieurs', section: 'charge', line2033: '2033-D G' },
+  'Frais de déplacement': { field: 'servicesExterieurs', section: 'charge', line2033: '2033-D G' },
+  'Formation': { field: 'servicesExterieurs', section: 'charge', line2033: '2033-D G' },
+  'Publicité & Marketing': { field: 'servicesExterieurs', section: 'charge', line2033: '2033-D G' },
+  'Repas professionnels': { field: 'servicesExterieurs', section: 'charge', line2033: '2033-D G' },
+  
+  // Expenses - Autres charges
+  'Loyer & Charges': { field: 'servicesExterieurs', section: 'charge', line2033: '2033-D G' },
+  'Assurances': { field: 'servicesExterieurs', section: 'charge', line2033: '2033-D G' },
+  
+  // Expenses - Honoraires
+  'Honoraires (comptable, avocat)': { field: 'servicesExterieurs', section: 'charge', line2033: '2033-D G' },
+  
+  // Expenses - Achats
+  'Materiel informatique': { field: 'achats', section: 'charge', line2033: '2033-D F' },
+  
+  // Expenses - Charges sociales et fiscales
+  'Cotisations sociales': { field: 'chargesPersonnel', section: 'charge', line2033: '2033-D H' },
+  'Rémunération': { field: 'chargesPersonnel', section: 'charge', line2033: '2033-D H' },
+  'Impôts et taxes': { field: 'impotsTaxes', section: 'charge', line2033: '2033-D I' },
+  
+  // Non-deductible
+  'Dividendes': { field: 'chargesExceptionnelles', section: 'charge', line2033: '2033-D N' },
+  'Dépenses diverses justifiées': { field: 'servicesExterieurs', section: 'charge', line2033: '2033-D G' },
+  'Retrait espèces': { field: 'nonDeductible', section: 'charge' },
+  'Non catégorisé': { field: 'autresCharges', section: 'charge', line2033: '2033-D G' },
+}
 
 // GET - List all liasses or get specific year
 export async function GET(request: NextRequest) {
@@ -10,13 +51,13 @@ export async function GET(request: NextRequest) {
     const year = searchParams.get('year')
 
     if (year) {
-      const liasse = await prisma.liasseFiscale.findUnique({
+      const liasse = await db.liasseFiscale.findUnique({
         where: { year: parseInt(year) }
       })
       return NextResponse.json({ liasse })
     }
 
-    const liasses = await prisma.liasseFiscale.findMany({
+    const liasses = await db.liasseFiscale.findMany({
       orderBy: { year: 'desc' }
     })
     return NextResponse.json({ liasses })
@@ -30,15 +71,19 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { year } = body
+    const { year, fiscalYearStartMonth = 12, fiscalYearEndMonth = 11 } = body
 
+    // For fiscal year ending Nov 30, 2026 (year=2026), we need transactions from Dec 1, 2025 to Nov 30, 2026
     const targetYear = year || new Date().getFullYear() - 1
+    
+    // Fiscal year: starts December of previous year, ends November of target year
+    const startDate = new Date(targetYear - 1, fiscalYearStartMonth - 1, 1) // Dec 1 of previous year
+    const endDate = new Date(targetYear, fiscalYearEndMonth, 0) // Nov 30 of target year
 
-    // Get all transactions for the fiscal year
-    const startDate = new Date(targetYear, 0, 1) // Jan 1st
-    const endDate = new Date(targetYear, 11, 31) // Dec 31st
+    console.log(`Generating liasse for fiscal year ${targetYear}`)
+    console.log(`Date range: ${startDate.toISOString()} to ${endDate.toISOString()}`)
 
-    const transactions = await prisma.transaction.findMany({
+    const transactions = await db.transaction.findMany({
       where: {
         date: {
           gte: startDate,
@@ -51,95 +96,131 @@ export async function POST(request: NextRequest) {
       }
     })
 
+    console.log(`Found ${transactions.length} labeled transactions`)
+
     // Get settings
-    const settings = await prisma.settings.findFirst()
+    const settings = await db.settings.findFirst()
 
-    // Calculate values from transactions
-    let chiffreAffaires = 0
-    let achats = 0
-    let loyers = 0
-    let chargesLocatives = 0
-    let entretienReparation = 0
-    let primesAssurance = 0
-    let fraisDeplacement = 0
-    let fraisPostaux = 0
-    let fraisTelecom = 0
-    let fraisBancaires = 0
-    let cadeaux = 0
-    let impotsTaxes = 0
-    let autresCharges = 0
-    let expertComptable = 0
-    let publiciteMarketing = 0
-    let formation = 0
+    // Initialize all fields
+    const liasseData: Record<string, number> = {
+      chiffreAffaires: 0,
+      autresProduits: 0,
+      achats: 0,
+      servicesExterieurs: 0,
+      chargesPersonnel: 0,
+      impotsTaxes: 0,
+      dotationsAmort: 0,
+      chargesFinancieres: 0,
+      chargesExceptionnelles: 0,
+      autresCharges: 0,
+      nonDeductible: 0,
+      
+      // Detail fields for 2033-G
+      loyers: 0,
+      chargesLocatives: 0,
+      entretienReparation: 0,
+      primesAssurance: 0,
+      fraisDeplacement: 0,
+      fraisPostaux: 0,
+      fraisTelecom: 0,
+      fraisBancaires: 0,
+      cadeaux: 0,
+      publiciteMarketing: 0,
+      formation: 0,
+      expertComptable: 0,
+      remunerationGerant: 0,
+      cotisationsSociales: 0,
+    }
 
+    // Category breakdown for transparency
+    const categoryBreakdown: Record<string, { count: number; total: number; field: string }> = {}
+
+    // Process each transaction
     for (const t of transactions) {
-      if (t.type === 'income') {
-        chiffreAffaires += Math.abs(t.amount)
-      } else if (t.type === 'expense') {
-        const cat = t.category?.name?.toLowerCase() || ''
-        const amount = Math.abs(t.amount)
+      const catName = t.category?.name || 'Non catégorisé'
+      const amount = Math.abs(t.amount)
+      
+      // Track category breakdown
+      if (!categoryBreakdown[catName]) {
+        categoryBreakdown[catName] = { count: 0, total: 0, field: 'unknown' }
+      }
+      categoryBreakdown[catName].count++
+      categoryBreakdown[catName].total += amount
 
-        if (cat.includes('fourniture') || cat.includes('matériel') || cat.includes('équipement')) {
-          achats += amount
-        } else if (cat.includes('loyer')) {
-          loyers += amount
-        } else if (cat.includes('énergie') || cat.includes('électricité') || cat.includes('gaz') || cat.includes('eau')) {
-          chargesLocatives += amount
-        } else if (cat.includes('assurance')) {
-          primesAssurance += amount
-        } else if (cat.includes('transport') || cat.includes('déplacement')) {
-          fraisDeplacement += amount
-        } else if (cat.includes('téléphone') || cat.includes('internet') || cat.includes('telecom')) {
-          fraisTelecom += amount
-        } else if (cat.includes('bancaire')) {
-          fraisBancaires += amount
-        } else if (cat.includes('impôt') || cat.includes('taxe') || cat.includes('cfe')) {
-          impotsTaxes += amount
-        } else if (cat.includes('repas') || cat.includes('réception')) {
-          cadeaux += amount
-        } else if (cat.includes('expert') || cat.includes('comptable')) {
-          expertComptable += amount
-        } else if (cat.includes('publicité') || cat.includes('marketing')) {
-          publiciteMarketing += amount
-        } else if (cat.includes('formation')) {
-          formation += amount
-        } else {
-          autresCharges += amount
+      if (t.type === 'income') {
+        liasseData.chiffreAffaires += amount
+        categoryBreakdown[catName].field = 'chiffreAffaires'
+      } else if (t.type === 'expense') {
+        const mapping = CATEGORY_TO_LIASSE[catName] || CATEGORY_TO_LIASSE['Non catégorisé']
+        
+        if (mapping && mapping.field !== 'nonDeductible') {
+          liasseData[mapping.field] = (liasseData[mapping.field] || 0) + amount
+          categoryBreakdown[catName].field = mapping.field
+        } else if (mapping?.field === 'nonDeductible') {
+          liasseData.nonDeductible += amount
+          categoryBreakdown[catName].field = 'nonDeductible (not included)'
         }
+
+        // Track specific expense types for 2033-G
+        const cat = catName.toLowerCase()
+        if (cat.includes('loyer')) liasseData.loyers += amount
+        if (cat.includes('assurance')) liasseData.primesAssurance += amount
+        if (cat.includes('déplacement') || cat.includes('transport')) liasseData.fraisDeplacement += amount
+        if (cat.includes('télécom') || cat.includes('téléphone') || cat.includes('internet')) liasseData.fraisTelecom += amount
+        if (cat.includes('bancaire')) liasseData.fraisBancaires += amount
+        if (cat.includes('repas') || cat.includes('restaurant')) liasseData.cadeaux += amount
+        if (cat.includes('publicité') || cat.includes('marketing')) liasseData.publiciteMarketing += amount
+        if (cat.includes('formation')) liasseData.formation += amount
+        if (cat.includes('comptable') || cat.includes('avocat') || cat.includes('honoraire')) liasseData.expertComptable += amount
+        if (cat.includes('rémunération') || cat.includes('salaire')) liasseData.remunerationGerant += amount
+        if (cat.includes('cotisation') || cat.includes('social')) liasseData.cotisationsSociales += amount
       }
     }
 
     // Calculate totals
-    const servicesExterieurs = loyers + chargesLocatives + entretienReparation +
-                               primesAssurance + fraisDeplacement + fraisPostaux +
-                               fraisTelecom + fraisBancaires + cadeaux + autresCharges +
-                               expertComptable + publiciteMarketing + formation
+    const totalProduits = liasseData.chiffreAffaires + liasseData.autresProduits
+    const totalCharges = liasseData.achats + 
+                        liasseData.servicesExterieurs + 
+                        liasseData.chargesPersonnel + 
+                        liasseData.impotsTaxes + 
+                        liasseData.dotationsAmort + 
+                        liasseData.chargesFinancieres + 
+                        liasseData.chargesExceptionnelles
 
-    const totalProduits = chiffreAffaires
-    const totalCharges = achats + servicesExterieurs + impotsTaxes
     const resultatCourant = totalProduits - totalCharges
 
-    // Calculate IS
+    // Calculate IS (Impôt sur les Sociétés)
     let isAPayer = 0
-    let baseImposableIS = Math.max(0, resultatCourant)
+    const baseImposableIS = Math.max(0, resultatCourant)
     if (baseImposableIS > 0) {
       if (baseImposableIS <= 42500) {
-        isAPayer = baseImposableIS * 0.15
+        isAPayer = baseImposableIS * 0.15 // Taux réduit PME
       } else {
-        isAPayer = (42500 * 0.15) + ((baseImposableIS - 42500) * 0.25)
+        isAPayer = (42500 * 0.15) + ((baseImposableIS - 42500) * 0.25) // Taux standard au-delà
       }
     }
 
     const resultatNet = resultatCourant - isAPayer
 
+    // Estimate cash position
+    const allTimeIncome = await db.transaction.aggregate({
+      where: { type: 'income' },
+      _sum: { amount: true }
+    })
+    const allTimeExpenses = await db.transaction.aggregate({
+      where: { type: 'expense' },
+      _sum: { amount: true }
+    })
+    const disponibilites = (allTimeIncome._sum.amount || 0) - Math.abs(allTimeExpenses._sum.amount || 0)
+
     // Create or update liasse
-    const liasse = await prisma.liasseFiscale.upsert({
+    const liasse = await db.liasseFiscale.upsert({
       where: { year: targetYear },
       create: {
         year: targetYear,
         status: 'draft',
         
-        // Actif
+        // Actif (Bilan)
         immoIncorporelles: 0,
         immoCorporelles: 0,
         immoFinancieres: 0,
@@ -147,12 +228,12 @@ export async function POST(request: NextRequest) {
         stocks: 0,
         creancesClients: 0,
         autresCreances: 0,
-        disponibilites: chiffreAffaires - totalCharges,
-        totalActifCirculant: chiffreAffaires - totalCharges,
-        totalActif: chiffreAffaires - totalCharges,
+        disponibilites: Math.max(0, disponibilites),
+        totalActifCirculant: Math.max(0, disponibilites),
+        totalActif: Math.max(0, disponibilites),
         
-        // Passif
-        capital: 1000, // Default minimum capital
+        // Passif (Bilan)
+        capital: 1000, // Minimum capital social
         reserves: 0,
         reportANouveau: 0,
         resultatExercice: resultatNet,
@@ -166,39 +247,39 @@ export async function POST(request: NextRequest) {
         totalPassif: 1000 + resultatNet + isAPayer,
         
         // Compte de résultat
-        chiffreAffaires,
+        chiffreAffaires: liasseData.chiffreAffaires,
         productionStockee: 0,
         productionImmo: 0,
         subventions: 0,
-        autresProduits: 0,
+        autresProduits: liasseData.autresProduits,
         totalProduits,
-        achats,
+        achats: liasseData.achats,
         variationStocks: 0,
-        servicesExterieurs,
-        chargesPersonnel: 0,
-        impotsTaxes,
-        dotationsAmort: 0,
+        servicesExterieurs: liasseData.servicesExterieurs,
+        chargesPersonnel: liasseData.chargesPersonnel,
+        impotsTaxes: liasseData.impotsTaxes,
+        dotationsAmort: liasseData.dotationsAmort,
         dotationsProvisions: 0,
-        chargesFinancieres: 0,
-        chargesExceptionnelles: 0,
+        chargesFinancieres: liasseData.chargesFinancieres,
+        chargesExceptionnelles: liasseData.chargesExceptionnelles,
         totalCharges,
         resultatCourant,
         resultatExceptionnel: 0,
         impotSurSocietes: isAPayer,
         resultatNet,
         
-        // Informations
+        // Informations complémentaires (2033-G)
         effectif: 0,
         dureeExercice: 12,
-        loyers,
-        chargesLocatives,
-        entretienReparation,
-        primesAssurance,
-        fraisDeplacement,
-        fraisPostaux,
-        fraisTelecom,
-        fraisBancaires,
-        cadeaux,
+        loyers: liasseData.loyers,
+        chargesLocatives: liasseData.chargesLocatives,
+        entretienReparation: liasseData.entretienReparation,
+        primesAssurance: liasseData.primesAssurance,
+        fraisDeplacement: liasseData.fraisDeplacement,
+        fraisPostaux: liasseData.fraisPostaux,
+        fraisTelecom: liasseData.fraisTelecom,
+        fraisBancaires: liasseData.fraisBancaires,
+        cadeaux: liasseData.cadeaux,
         materielsOutils: 0,
         materielsBureau: 0,
         materielsInfo: 0,
@@ -206,10 +287,10 @@ export async function POST(request: NextRequest) {
         tvaCollectee: 0,
         tvaDeductible: 0,
         tvaDue: 0,
-        remunerationGerant: 0,
-        cotisationsSociales: 0,
+        remunerationGerant: liasseData.remunerationGerant,
+        cotisationsSociales: liasseData.cotisationsSociales,
         
-        // Déclaration
+        // Déclaration (2065)
         resultatComptable: resultatCourant,
         retraitements: 0,
         resultatFiscal: resultatCourant,
@@ -220,51 +301,68 @@ export async function POST(request: NextRequest) {
         isAPayer,
       },
       update: {
-        // Update with new calculated values
-        disponibilites: chiffreAffaires - totalCharges,
-        totalActifCirculant: chiffreAffaires - totalCharges,
-        totalActif: chiffreAffaires - totalCharges,
+        // Update all calculated values
+        disponibilites: Math.max(0, disponibilites),
+        totalActifCirculant: Math.max(0, disponibilites),
+        totalActif: Math.max(0, disponibilites),
         resultatExercice: resultatNet,
         totalCapitauxPropres: 1000 + resultatNet,
         dettesFiscales: isAPayer,
         totalDettes: isAPayer,
         totalPassif: 1000 + resultatNet + isAPayer,
-        chiffreAffaires,
+        chiffreAffaires: liasseData.chiffreAffaires,
+        autresProduits: liasseData.autresProduits,
         totalProduits,
-        achats,
-        servicesExterieurs,
-        impotsTaxes,
+        achats: liasseData.achats,
+        servicesExterieurs: liasseData.servicesExterieurs,
+        chargesPersonnel: liasseData.chargesPersonnel,
+        impotsTaxes: liasseData.impotsTaxes,
+        dotationsAmort: liasseData.dotationsAmort,
+        chargesFinancieres: liasseData.chargesFinancieres,
+        chargesExceptionnelles: liasseData.chargesExceptionnelles,
         totalCharges,
         resultatCourant,
         impotSurSocietes: isAPayer,
         resultatNet,
-        loyers,
-        chargesLocatives,
-        primesAssurance,
-        fraisDeplacement,
-        fraisTelecom,
-        fraisBancaires,
-        cadeaux,
+        loyers: liasseData.loyers,
+        primesAssurance: liasseData.primesAssurance,
+        fraisDeplacement: liasseData.fraisDeplacement,
+        fraisTelecom: liasseData.fraisTelecom,
+        fraisBancaires: liasseData.fraisBancaires,
+        cadeaux: liasseData.cadeaux,
+        remunerationGerant: liasseData.remunerationGerant,
+        cotisationsSociales: liasseData.cotisationsSociales,
         baseImposableIS,
         isAPayer,
       }
     })
+
+    console.log(`Liasse generated successfully:`)
+    console.log(`  - CA: ${liasseData.chiffreAffaires}`)
+    console.log(`  - Charges: ${totalCharges}`)
+    console.log(`  - Résultat: ${resultatCourant}`)
+    console.log(`  - IS: ${isAPayer}`)
 
     return NextResponse.json({
       success: true,
       liasse,
       summary: {
         transactions: transactions.length,
-        chiffreAffaires,
+        chiffreAffaires: liasseData.chiffreAffaires,
         totalCharges,
         resultatCourant,
         isAPayer,
-        resultatNet
-      }
+        resultatNet,
+        nonDeductible: liasseData.nonDeductible,
+      },
+      categoryBreakdown,
     })
   } catch (error) {
     console.error('Error generating liasse:', error)
-    return NextResponse.json({ error: 'Failed to generate liasse' }, { status: 500 })
+    return NextResponse.json({ 
+      error: 'Failed to generate liasse',
+      details: error instanceof Error ? error.message : String(error)
+    }, { status: 500 })
   }
 }
 
@@ -302,7 +400,7 @@ export async function PUT(request: NextRequest) {
       }
     }
 
-    const liasse = await prisma.liasseFiscale.update({
+    const liasse = await db.liasseFiscale.update({
       where: { id },
       data: {
         ...data,
@@ -339,7 +437,7 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: 'ID required' }, { status: 400 })
     }
 
-    await prisma.liasseFiscale.delete({
+    await db.liasseFiscale.delete({
       where: { id }
     })
 

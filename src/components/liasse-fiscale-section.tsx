@@ -8,8 +8,10 @@ import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Separator } from '@/components/ui/separator'
+import { Alert, AlertDescription } from '@/components/ui/alert'
 import {
-  FileText, Download, Loader2, Calculator, Building2, TrendingUp, TrendingDown, Euro
+  FileText, Download, Loader2, Calculator, Building2, TrendingUp, TrendingDown, Euro,
+  AlertCircle, CheckCircle, Info
 } from 'lucide-react'
 
 interface LiasseData {
@@ -38,6 +40,16 @@ interface LiasseData {
   // Déclaration
   baseImposableIS: number
   isAPayer: number
+  
+  // 2033-G details
+  loyers: number
+  primesAssurance: number
+  fraisDeplacement: number
+  fraisTelecom: number
+  fraisBancaires: number
+  cadeaux: number
+  remunerationGerant: number
+  cotisationsSociales: number
 }
 
 interface Settings {
@@ -54,6 +66,12 @@ interface Transaction {
   labeled: boolean
 }
 
+interface CategoryBreakdown {
+  count: number
+  total: number
+  field: string
+}
+
 interface LiasseFiscaleSectionProps {
   settings: Settings | null
   transactions: Transaction[]
@@ -65,6 +83,8 @@ export function LiasseFiscaleSection({ settings, transactions }: LiasseFiscaleSe
   const [loading, setLoading] = useState(false)
   const [generating, setGenerating] = useState(false)
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear() - 1)
+  const [categoryBreakdown, setCategoryBreakdown] = useState<Record<string, CategoryBreakdown>>({})
+  const [nonDeductible, setNonDeductible] = useState(0)
 
   useEffect(() => {
     fetchLiasses()
@@ -98,11 +118,26 @@ export function LiasseFiscaleSection({ settings, transactions }: LiasseFiscaleSe
       const data = await res.json()
       if (data.success) {
         setLiasse(data.liasse)
+        setCategoryBreakdown(data.categoryBreakdown || {})
+        setNonDeductible(data.summary?.nonDeductible || 0)
         fetchLiasses()
-        alert(`Liasse fiscale ${year} générée avec succès!\n\nChiffre d'affaires: ${formatCurrency(data.summary.chiffreAffaires)}\nRésultat: ${formatCurrency(data.summary.resultatCourant)}\nIS à payer: ${formatCurrency(data.summary.isAPayer)}`)
+        
+        const summary = data.summary
+        alert(`✅ Liasse fiscale ${year} générée!
+
+📊 Résumé:
+• Chiffre d'affaires: ${formatCurrency(summary.chiffreAffaires)}
+• Total charges: ${formatCurrency(summary.totalCharges)}
+• Résultat: ${formatCurrency(summary.resultatCourant)}
+• IS à payer: ${formatCurrency(summary.isAPayer)}
+
+${summary.nonDeductible > 0 ? `⚠️ Dépenses non déductibles: ${formatCurrency(summary.nonDeductible)}` : ''}`)
+      } else {
+        alert('Erreur: ' + (data.error || 'Erreur inconnue'))
       }
     } catch (error) {
       console.error('Error generating liasse:', error)
+      alert('Erreur lors de la génération')
     } finally {
       setGenerating(false)
     }
@@ -128,21 +163,23 @@ export function LiasseFiscaleSection({ settings, transactions }: LiasseFiscaleSe
     <div className="space-y-6">
       {/* Warning if unlabeled transactions */}
       {unlabeledTransactions.length > 0 && (
-        <Card className="border-amber-200 bg-amber-50">
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-3">
-              <div className="text-amber-600 text-2xl">⚠️</div>
-              <div>
-                <p className="font-medium text-amber-800">Transactions non catégorisées</p>
-                <p className="text-sm text-amber-700">
-                  Vous avez {unlabeledTransactions.length} transaction(s) non catégorisées. 
-                  Catégorisez-les d'abord pour une liasse fiscale accurate.
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+        <Alert className="border-amber-200 bg-amber-50">
+          <AlertCircle className="h-4 w-4 text-amber-600" />
+          <AlertDescription className="text-amber-800">
+            <strong>{unlabeledTransactions.length} transaction(s)</strong> non catégorisées. 
+            Catégorisez-les pour une liasse fiscale accurate.
+          </AlertDescription>
+        </Alert>
       )}
+
+      {/* Info about fiscal year */}
+      <Alert>
+        <Info className="h-4 w-4" />
+        <AlertDescription>
+          <strong>Exercice fiscal:</strong> Votre exercice clos le 30/11/{selectedYear}. 
+          Les transactions prises en compte vont du 01/12/{selectedYear - 1} au 30/11/{selectedYear}.
+        </AlertDescription>
+      </Alert>
 
       {/* Generate Liasse */}
       <Card>
@@ -152,35 +189,42 @@ export function LiasseFiscaleSection({ settings, transactions }: LiasseFiscaleSe
             Générer une Liasse Fiscale
           </CardTitle>
           <CardDescription>
-            Générez automatiquement votre liasse fiscale (2033-SD) à partir de vos transactions catégorisées
+            Générez automatiquement votre liasse fiscale (2033-SD, 2033-A, 2033-D, 2033-G) à partir de vos transactions catégorisées
           </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="flex items-end gap-4">
             <div className="flex-1">
-              <Label>Année fiscale</Label>
+              <Label>Année de clôture d'exercice</Label>
               <select 
                 className="w-full mt-1 p-2 border rounded-md"
                 value={selectedYear}
                 onChange={(e) => setSelectedYear(parseInt(e.target.value))}
               >
-                {[2024, 2023, 2022, 2021].map(y => (
-                  <option key={y} value={y}>{y}</option>
+                {[2026, 2025, 2024, 2023, 2022].map(y => (
+                  <option key={y} value={y}>Exercice clos le 30/11/{y}</option>
                 ))}
               </select>
             </div>
-            <Button onClick={() => generateLiasse(selectedYear)} disabled={generating}>
+            <Button onClick={() => generateLiasse(selectedYear)} disabled={generating || unlabeledTransactions.length > 0}>
               {generating ? (
                 <Loader2 className="h-4 w-4 animate-spin mr-2" />
               ) : (
                 <Calculator className="h-4 w-4 mr-2" />
               )}
-              Générer la liasse {selectedYear}
+              Générer la liasse
             </Button>
           </div>
           
-          <div className="mt-4 text-sm text-muted-foreground">
-            <p>Transactions catégorisées disponibles: <strong>{labeledTransactions.length}</strong></p>
+          <div className="mt-4 grid grid-cols-2 gap-4 text-sm">
+            <div className="p-3 bg-muted rounded-md">
+              <span className="text-muted-foreground">Transactions catégorisées:</span>
+              <span className="font-bold ml-2">{labeledTransactions.length}</span>
+            </div>
+            <div className="p-3 bg-muted rounded-md">
+              <span className="text-muted-foreground">En attente:</span>
+              <span className="font-bold ml-2 text-amber-600">{unlabeledTransactions.length}</span>
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -196,7 +240,7 @@ export function LiasseFiscaleSection({ settings, transactions }: LiasseFiscaleSe
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Année</TableHead>
+                    <TableHead>Exercice</TableHead>
                     <TableHead>Chiffre d'affaires</TableHead>
                     <TableHead>Résultat</TableHead>
                     <TableHead>IS à payer</TableHead>
@@ -207,7 +251,7 @@ export function LiasseFiscaleSection({ settings, transactions }: LiasseFiscaleSe
                 <TableBody>
                   {liasses.map((l) => (
                     <TableRow key={l.id}>
-                      <TableCell className="font-medium">{l.year}</TableCell>
+                      <TableCell className="font-medium">30/11/{l.year}</TableCell>
                       <TableCell>{formatCurrency(l.chiffreAffaires)}</TableCell>
                       <TableCell className={l.resultatCourant >= 0 ? 'text-emerald-600' : 'text-red-600'}>
                         {formatCurrency(l.resultatCourant)}
@@ -253,7 +297,7 @@ export function LiasseFiscaleSection({ settings, transactions }: LiasseFiscaleSe
                     </CardDescription>
                   </div>
                   <div className="text-right">
-                    <Badge variant="outline" className="mb-2">Exercice {liasse.year}</Badge>
+                    <Badge variant="outline" className="mb-2">Exercice clos le 30/11/{liasse.year}</Badge>
                     <br />
                     <Button onClick={downloadPDF} variant="outline" size="sm">
                       <Download className="h-4 w-4 mr-2" />
@@ -328,16 +372,16 @@ export function LiasseFiscaleSection({ settings, transactions }: LiasseFiscaleSe
                   <h4 className="font-semibold mb-3 text-emerald-700">PRODUITS</h4>
                   <div className="space-y-2">
                     <div className="flex justify-between">
-                      <span>Chiffre d'affaires</span>
+                      <span>Chiffre d'affaires (A)</span>
                       <span className="font-mono">{formatCurrency(liasse.chiffreAffaires)}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span>Autres produits</span>
+                      <span>Autres produits (E)</span>
                       <span className="font-mono">{formatCurrency(liasse.totalProduits - liasse.chiffreAffaires)}</span>
                     </div>
                     <Separator />
                     <div className="flex justify-between font-semibold">
-                      <span>Total Produits</span>
+                      <span>Total Produits (F)</span>
                       <span className="font-mono">{formatCurrency(liasse.totalProduits)}</span>
                     </div>
                   </div>
@@ -348,20 +392,20 @@ export function LiasseFiscaleSection({ settings, transactions }: LiasseFiscaleSe
                   <h4 className="font-semibold mb-3 text-red-700">CHARGES</h4>
                   <div className="space-y-2">
                     <div className="flex justify-between">
-                      <span>Achats</span>
+                      <span>Achats (F)</span>
                       <span className="font-mono">{formatCurrency(liasse.achats)}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span>Services extérieurs</span>
+                      <span>Services extérieurs (G)</span>
                       <span className="font-mono">{formatCurrency(liasse.servicesExterieurs)}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span>Impôts et taxes</span>
+                      <span>Impôts et taxes (I)</span>
                       <span className="font-mono">{formatCurrency(liasse.impotsTaxes)}</span>
                     </div>
                     <Separator />
                     <div className="flex justify-between font-semibold">
-                      <span>Total Charges</span>
+                      <span>Total Charges (O)</span>
                       <span className="font-mono">{formatCurrency(liasse.totalCharges)}</span>
                     </div>
                   </div>
@@ -372,18 +416,18 @@ export function LiasseFiscaleSection({ settings, transactions }: LiasseFiscaleSe
 
               <div className="space-y-2">
                 <div className="flex justify-between font-semibold text-lg">
-                  <span>Résultat courant</span>
+                  <span>Résultat courant (P)</span>
                   <span className={`font-mono ${liasse.resultatCourant >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
                     {formatCurrency(liasse.resultatCourant)}
                   </span>
                 </div>
                 <div className="flex justify-between">
-                  <span>Impôt sur les sociétés</span>
+                  <span>Impôt sur les sociétés (R)</span>
                   <span className="font-mono text-blue-600">-{formatCurrency(liasse.impotSurSocietes)}</span>
                 </div>
                 <Separator />
                 <div className="flex justify-between font-bold text-xl">
-                  <span>Résultat Net</span>
+                  <span>Résultat Net (S)</span>
                   <span className={`font-mono ${liasse.resultatNet >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
                     {formatCurrency(liasse.resultatNet)}
                   </span>
@@ -392,47 +436,48 @@ export function LiasseFiscaleSection({ settings, transactions }: LiasseFiscaleSe
             </CardContent>
           </Card>
 
-          {/* Bilan Simplifié */}
+          {/* 2033-G Detail */}
           <Card>
             <CardHeader>
-              <CardTitle>Bilan Simplifié (Formulaire 2033-A)</CardTitle>
-              <CardDescription>Situation patrimoniale au 31 décembre {liasse.year}</CardDescription>
+              <CardTitle>Informations Complémentaires (Formulaire 2033-G)</CardTitle>
+              <CardDescription>Détail des charges par nature</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="grid md:grid-cols-2 gap-6">
-                {/* Actif */}
-                <div>
-                  <h4 className="font-semibold mb-3 text-blue-700">ACTIF</h4>
-                  <div className="space-y-2">
-                    <div className="flex justify-between">
-                      <span>Disponibilités (trésorerie)</span>
-                      <span className="font-mono">{formatCurrency(liasse.disponibilites)}</span>
-                    </div>
-                    <Separator />
-                    <div className="flex justify-between font-semibold">
-                      <span>Total Actif</span>
-                      <span className="font-mono">{formatCurrency(liasse.totalActif)}</span>
-                    </div>
+              <div className="grid md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <div className="flex justify-between">
+                    <span>Loyers</span>
+                    <span className="font-mono">{formatCurrency(liasse.loyers)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Primes d'assurance</span>
+                    <span className="font-mono">{formatCurrency(liasse.primesAssurance)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Frais de déplacement</span>
+                    <span className="font-mono">{formatCurrency(liasse.fraisDeplacement)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Frais télécom</span>
+                    <span className="font-mono">{formatCurrency(liasse.fraisTelecom)}</span>
                   </div>
                 </div>
-
-                {/* Passif */}
-                <div>
-                  <h4 className="font-semibold mb-3 text-purple-700">PASSIF</h4>
-                  <div className="space-y-2">
-                    <div className="flex justify-between">
-                      <span>Capital social</span>
-                      <span className="font-mono">{formatCurrency(liasse.capital)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>Résultat de l'exercice</span>
-                      <span className="font-mono">{formatCurrency(liasse.resultatNet)}</span>
-                    </div>
-                    <Separator />
-                    <div className="flex justify-between font-semibold">
-                      <span>Total Passif</span>
-                      <span className="font-mono">{formatCurrency(liasse.totalPassif)}</span>
-                    </div>
+                <div className="space-y-2">
+                  <div className="flex justify-between">
+                    <span>Frais bancaires</span>
+                    <span className="font-mono">{formatCurrency(liasse.fraisBancaires)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Repas/Cadeaux</span>
+                    <span className="font-mono">{formatCurrency(liasse.cadeaux)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Rémunération gérant</span>
+                    <span className="font-mono">{formatCurrency(liasse.remunerationGerant)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Cotisations sociales</span>
+                    <span className="font-mono">{formatCurrency(liasse.cotisationsSociales)}</span>
                   </div>
                 </div>
               </div>
@@ -476,6 +521,53 @@ export function LiasseFiscaleSection({ settings, transactions }: LiasseFiscaleSe
               </div>
             </CardContent>
           </Card>
+
+          {/* Bilan Simplifié */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Bilan Simplifié (Formulaire 2033-A)</CardTitle>
+              <CardDescription>Situation patrimoniale au 30/11/{liasse.year}</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid md:grid-cols-2 gap-6">
+                {/* Actif */}
+                <div>
+                  <h4 className="font-semibold mb-3 text-blue-700">ACTIF</h4>
+                  <div className="space-y-2">
+                    <div className="flex justify-between">
+                      <span>Disponibilités (trésorerie)</span>
+                      <span className="font-mono">{formatCurrency(liasse.disponibilites)}</span>
+                    </div>
+                    <Separator />
+                    <div className="flex justify-between font-semibold">
+                      <span>Total Actif</span>
+                      <span className="font-mono">{formatCurrency(liasse.totalActif)}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Passif */}
+                <div>
+                  <h4 className="font-semibold mb-3 text-purple-700">PASSIF</h4>
+                  <div className="space-y-2">
+                    <div className="flex justify-between">
+                      <span>Capital social</span>
+                      <span className="font-mono">{formatCurrency(liasse.capital)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Résultat de l'exercice</span>
+                      <span className="font-mono">{formatCurrency(liasse.resultatNet)}</span>
+                    </div>
+                    <Separator />
+                    <div className="flex justify-between font-semibold">
+                      <span>Total Passif</span>
+                      <span className="font-mono">{formatCurrency(liasse.totalPassif)}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
         </>
       )}
 
@@ -486,7 +578,7 @@ export function LiasseFiscaleSection({ settings, transactions }: LiasseFiscaleSe
             <FileText className="h-16 w-16 mx-auto mb-4 text-muted-foreground opacity-50" />
             <p className="text-lg font-medium">Aucune liasse fiscale générée</p>
             <p className="text-muted-foreground mt-2">
-              Importez et catégorisez vos transactions, puis générez votre liasse fiscale.
+              Catégorisez vos transactions, puis générez votre liasse fiscale.
             </p>
           </CardContent>
         </Card>

@@ -1,6 +1,7 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Suspense } from 'react'
+import { useSearchParams, usePathname, useRouter } from 'next/navigation'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -89,8 +90,23 @@ interface InvoiceItem {
 }
 
 // Main component
-export default function TaxDashboard() {
-  const [activeTab, setActiveTab] = useState('overview')
+function TaxDashboardContent() {
+  const searchParams = useSearchParams()
+  const pathname = usePathname()
+  const router = useRouter()
+  
+  // Get active tab from URL or default to 'overview'
+  const tabFromUrl = searchParams.get('tab')
+  const activeTab = tabFromUrl || 'overview'
+  
+  const setActiveTab = (tab: string) => {
+    if (tab === 'overview') {
+      router.push(pathname)
+    } else {
+      router.push(`${pathname}?tab=${tab}`)
+    }
+  }
+  
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [categories, setCategories] = useState<Category[]>([])
   const [deadlines, setDeadlines] = useState<Deadline[]>([])
@@ -121,16 +137,6 @@ export default function TaxDashboard() {
 
   // Fetch initial data
   useEffect(() => {
-    // Check URL params for tab
-    const params = new URLSearchParams(window.location.search)
-    const tab = params.get('tab')
-    if (tab) {
-      if (tab === 'transactions') setActiveTab('transactions')
-      else if (tab === 'calendar') setActiveTab('deadlines')
-      else if (tab === 'invoices') setActiveTab('invoices')
-      else if (tab === 'settings') setActiveTab('settings')
-    }
-    
     fetchAllData()
   }, [])
 
@@ -2017,5 +2023,23 @@ export default function TaxDashboard() {
         </div>
       )}
     </div>
+  )
+}
+
+// Loading component for Suspense
+function LoadingSpinner() {
+  return (
+    <div className="flex items-center justify-center min-h-[400px]">
+      <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+    </div>
+  )
+}
+
+// Export with Suspense boundary for useSearchParams
+export default function TaxDashboard() {
+  return (
+    <Suspense fallback={<LoadingSpinner />}>
+      <TaxDashboardContent />
+    </Suspense>
   )
 }

@@ -23,6 +23,8 @@ import {
 } from 'lucide-react'
 import { LiasseFiscaleSection } from '@/components/liasse-fiscale-section'
 import { DeclarationsSection } from '@/components/declarations-section'
+import { FormulaireISSection } from '@/components/formulaire-is-section'
+import { FormulaireTVASection } from '@/components/formulaire-tva-section'
 import { DevisSection } from '@/components/devis-section'
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from '@/components/ui/chart'
 import { Bar, BarChart, XAxis, YAxis, CartesianGrid, Line, LineChart as RechartsLineChart, ResponsiveContainer, Area, AreaChart } from 'recharts'
@@ -623,6 +625,8 @@ function TaxDashboardContent() {
           <TabsTrigger value="invoices">Factures</TabsTrigger>
           <TabsTrigger value="devis">Devis</TabsTrigger>
           <TabsTrigger value="liasse">Liasse Fiscale</TabsTrigger>
+          <TabsTrigger value="formulaire-is">Formulaires IS</TabsTrigger>
+          <TabsTrigger value="formulaire-tva">TVA (3517-S)</TabsTrigger>
           <TabsTrigger value="declarations">Déclarations</TabsTrigger>
           <TabsTrigger value="settings">Paramètres</TabsTrigger>
         </TabsList>
@@ -1812,6 +1816,16 @@ function TaxDashboardContent() {
         {/* Liasse Fiscale Tab */}
         <TabsContent value="liasse" className="space-y-6">
           <LiasseFiscaleSection settings={settings} transactions={transactions} />
+        </TabsContent>
+
+        {/* Formulaires IS Tab - 2572 & 2065 */}
+        <TabsContent value="formulaire-is" className="space-y-6">
+          <FormulaireISSection settings={settings} transactions={transactions} />
+        </TabsContent>
+
+        {/* TVA 3517-S Tab */}
+        <TabsContent value="formulaire-tva" className="space-y-6">
+          <FormulaireTVASection settings={settings} />
         </TabsContent>
 
         {/* Declarations Tab - TVA & IS */}

@@ -333,6 +333,205 @@ model CategoryRule {
   @@unique([pattern]) // One rule per pattern
 }
 
+// Formulaire 2572 - Relevé de solde IS (IS Balance Settlement)
+model Formulaire2572 {
+  id              String   @id @default(cuid())
+  year            Int      // Fiscal year ending (e.g., 2025 for FY closing 30/11/2025)
+  status          String   @default("draft") // draft, complete, filed
+
+  // Section 1: Résultat de l'exercice
+  resultatNetBenefice  Float  @default(0)   // Ligne I - Bénéfice net ou déficit
+  resultatNetDeficit   Float  @default(0)   // Ligne I (if negative)
+  
+  // Section 2: IS dû au taux normal (25%)
+  baseTauxNormal       Float  @default(0)   // Ligne II - Base imposable au taux normal
+  isTauxNormal         Float  @default(0)   // Ligne II - IS au taux normal (25%)
+  
+  // Section 3: IS au taux réduit (15%)
+  baseTauxReduit       Float  @default(0)   // Ligne III - Base imposable au taux réduit
+  isTauxReduit         Float  @default(0)   // Ligne III - IS au taux réduit (15%)
+  
+  // Section 4: Crédits d'impôt imputables
+  creditImpotRecherche       Float @default(0)  // CIR
+  creditImpotInnovation      Float @default(0)  // CII
+  creditImpotCooperation     Float @default(0)  // CCor
+  creditImpotApprentissage   Float @default(0)  // Crédit d'apprentissage
+  creditImpotFamille         Float @default(0)  // CAF
+  creditImpotMEC             Float @default(0)  // Mécénat
+  creditImpotCompetitivite   Float @default(0)  // CICE (ancien)
+  creditImpotAgri            Float @default(0)  // Crédit agricole
+  creditImpotAutres          Float @default(0)  // Autres crédits
+  totalCreditsImpot          Float @default(0)  // Total crédits d'impôt
+  
+  // Section 5: IS net et acomptes
+  totalISBrut           Float  @default(0)   // IS brut (taux normal + réduit)
+  totalISNet            Float  @default(0)   // IS après imputation crédits
+  
+  // Acomptes versés
+  acompte1              Float  @default(0)   // 1er acompte (15 mars)
+  acompte2              Float  @default(0)   // 2e acompte (15 juin)
+  acompte3              Float  @default(0)   // 3e acompte (15 sept.)
+  acompte4              Float  @default(0)   // 4e acompte (15 déc.)
+  totalAcomptes         Float  @default(0)   // Total acomptes versés
+  
+  // Section 6: Solde / Excédent
+  soldeAPayer           Float  @default(0)   // Solde à payer (if IS net > acomptes)
+  excedent             Float  @default(0)   // Excédent à rembourser (if acomptes > IS net)
+  
+  // Contributions additionnelles
+  cfb                   Float  @default(0)   // Contribution sur les bénéfices
+  contributionSociale   Float  @default(0)   // Contribution sociale
+  
+  // Impôts étrangers (crédits d'impôt)
+  impotsEtrangersCr     Float  @default(0)   // Ligne 7 - Impôts payés à l'étranger
+  
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  
+  @@unique([year])
+}
+
+// Formulaire 2065 - Déclaration des bénéfices (IS Declaration)
+model Formulaire2065 {
+  id              String   @id @default(cuid())
+  year            Int      // Fiscal year ending
+  status          String   @default("draft") // draft, complete, filed
+
+  // Identification
+  regimeBenefice  String   @default("RS") // RS (Réel Simplifié), RN (Réel Normal)
+  dureeExercice   Int      @default(12)  // Duration in months
+  dateCloture     String   @default("")  // Closing date string (30/11/YYYY)
+
+  // Section 1: Résultat comptable et fiscal
+  resultatComptable     Float  @default(0)  // Ligne 1 - Résultat comptable
+  reintegrationNeutralite Float @default(0)  // Réintégrations neutralisées (art. 223 octies)
+  deductionsNeutralite  Float @default(0)   // Déductions neutralisées
+  resultatFiscal        Float  @default(0)  // Ligne 3 - Résultat fiscal net
+  
+  // Section 2: Déficits reportables
+  deficitAnterieurN1    Float  @default(0)  // Ligne 4 - Déficit N-1
+  deficitAnterieurN2    Float  @default(0)  // Ligne 5 - Déficit N-2
+  deficitAnterieurN3    Float  @default(0)  // Ligne 6 - Déficits antérieurs
+  totalDeficits         Float  @default(0)  // Total déficits imputables
+  deficitUtilise        Float  @default(0)  // Déficits effectivement utilisés
+  
+  // Section 3: Base imposable
+  baseImposableAvant    Float  @default(0)  // Base avant déduction déficits
+  baseImposable         Float  @default(0)  // Ligne 7 - Base imposable nette
+  
+  // Section 4: Calcul de l'IS
+  baseTauxReduit        Float  @default(0)  // Part de la base au taux réduit 15%
+  baseTauxNormal        Float  @default(0)  // Part de la base au taux normal 25%
+  isTauxReduit          Float  @default(0)  // IS au taux réduit (15%)
+  isTauxNormal          Float  @default(0)  // IS au taux normal (25%)
+  isTotal               Float  @default(0)  // IS total brut
+  
+  // Section 5: Crédits d'impôt
+  creditImpotRecherche       Float @default(0)
+  creditImpotInnovation      Float @default(0)
+  creditImpotCooperation     Float @default(0)
+  creditImpotApprentissage   Float @default(0)
+  creditImpotFamille         Float @default(0)
+  creditImpotMEC             Float @default(0)
+  creditImpotAutres          Float @default(0)
+  totalCreditsImpot          Float @default(0)
+  
+  // Section 6: IS net et contributions
+  isNet                 Float  @default(0)  // IS net à payer
+  contributionSociale   Float  @default(0)  // Contribution sociale (3.3%)
+  cfb                   Float  @default(0)  // CFB
+  
+  // Section 7: Répartition géographique des bénéfices
+  beneficeFrance        Float  @default(0)  // Bénéfices imposables en France
+  beneficeEtranger      Float  @default(0)  // Bénéfices imposables à l'étranger
+  totalBenefice         Float  @default(0)  // Total bénéfices
+  
+  // Section 8: Informations spécifiques
+  revenusBrevets        Float  @default(0)  // Revenus de brevets (taux 10%)
+  revenusPatrimoineMobilier Float @default(0) // Revenus de patrimoine mobilier
+  
+  // Section 9: Précompte et acomptes
+  precompteIS           Float  @default(0)  // Précompte déduit
+  acomptesVerses        Float  @default(0)  // Acomptes versés au titre de l'exercice
+  
+  // Section 10: Références aux annexes
+  annexesFournies       String  @default("")  // JSON list of annexes (2065-BIS, 2033-A, etc.)
+  
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  
+  @@unique([year])
+}
+
+// Formulaire 3517-S - Déclaration annuelle de TVA (CA12) - Régime Simplifié
+model Formulaire3517S {
+  id              String   @id @default(cuid())
+  year            Int      // Fiscal year ending (e.g., 2025 for FY closing 30/11/2025)
+  status          String   @default("draft") // draft, complete, filed
+
+  // Section 1: TVA collectée (VAT collected on sales)
+  // Ligne 5A - Taux normal 20%
+  baseHT20        Float    @default(0)   // Base HT (sales at 20%)
+  tvaCollectee20  Float    @default(0)   // TVA collected at 20%
+  
+  // Ligne 5B - Taux intermédiaire 10%
+  baseHT10        Float    @default(0)   // Base HT (sales at 10%)
+  tvaCollectee10  Float    @default(0)   // TVA collected at 10%
+  
+  // Ligne 5C - Taux réduit 5.5%
+  baseHT55        Float    @default(0)   // Base HT (sales at 5.5%)
+  tvaCollectee55  Float    @default(0)   // TVA collected at 5.5%
+  
+  // Ligne 5D - Taux particulier 2.1%
+  baseHT21        Float    @default(0)   // Base HT (sales at 2.1%)
+  tvaCollectee21  Float    @default(0)   // TVA collected at 2.1%
+
+  // Ligne 16 - Total TVA brute due
+  totalTVABrute   Float    @default(0)   // Sum of all collected TVA
+  
+  // Ligne 18 - Total base HT
+  totalBaseHT     Float    @default(0)   // Sum of all base HT
+
+  // Section 2: TVA déductible (VAT deductible on purchases)
+  // Ligne 20 - TVA on goods and services (current expenses)
+  tvaDeductibleBiensServices  Float  @default(0)
+  
+  // Ligne 21 - TVA on immobilizations (equipment, etc.)
+  tvaDeductibleImmobilisations Float @default(0)
+  
+  // Ligne 22 - Total TVA déductible
+  totalTVADeductible  Float  @default(0)
+  
+  // Ligne 26 - Total deductions
+  totalDeductions     Float  @default(0)
+
+  // Section 3: TVA nette
+  // Ligne 28 - TVA due (or credit)
+  tvaNette        Float    @default(0)   // totalTVABrute - totalTVADeductible
+  
+  // Ligne 33 - Crédit de TVA à reporter (if negative)
+  creditTVA       Float    @default(0)   // max(0, -tvaNette)
+  
+  // Ligne 54 - TVA nette due
+  tvaNetteDue     Float    @default(0)   // max(0, tvaNette)
+  
+  // Ligne 56 - Total à payer
+  totalAPayer     Float    @default(0)   // = tvaNetteDue
+
+  // Metadata
+  periodeStart    String   @default("")   // e.g. "01/12/2024"
+  periodeEnd      String   @default("")   // e.g. "30/11/2025"
+  
+  // Source data counts
+  nombreVentes    Int      @default(0)   // Number of invoices/transactions used
+  nombreAchats    Int      @default(0)   // Number of purchase transactions used
+
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  
+  @@unique([year])
+}
+
 // Tax declarations (IS, TVA)
 model Declaration {
   id              String   @id @default(cuid())

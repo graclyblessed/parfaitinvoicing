@@ -15,6 +15,7 @@ import {
   Building2,
   ChevronUp,
   Loader2,
+  FileCheck,
 } from 'lucide-react'
 import {
   Sidebar,
@@ -46,6 +47,7 @@ const navigation = [
       { name: 'Transactions', href: '/?tab=transactions', icon: ArrowUpDown, tab: 'transactions' },
       { name: 'Échéances', href: '/?tab=deadlines', icon: CalendarDays, tab: 'deadlines' },
       { name: 'Factures', href: '/?tab=invoices', icon: FileText, tab: 'invoices' },
+      { name: 'Formulaires IS', href: '/?tab=formulaire-is', icon: FileCheck, tab: 'formulaire-is' },
     ],
   },
   {

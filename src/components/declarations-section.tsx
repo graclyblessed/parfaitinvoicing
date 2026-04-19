@@ -204,25 +204,49 @@ export function DeclarationsSection({ settings }: DeclarationsSectionProps) {
     return Math.ceil((date.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
   }
 
-  // Generate IS declaration
+  // Generate IS declarations (4 quarterly acomptes)
   const generateISDeclaration = async (year: number) => {
     try {
-      const res = await fetch('/api/declarations', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          type: 'IS', 
-          year,
-          period: `FY${year}`,
-          amount: previousYearIS
-        })
-      })
-      const data = await res.json()
-      if (data.success) {
-        alert(`Déclaration IS générée pour l'exercice ${year}`)
+      const acompteAmount = previousYearIS > 0 ? Math.round((previousYearIS / 4) * 100) / 100 : 0
+      const quarters = [
+        { period: `IS-Q1-${year}`, month: 2 },   // March (index 2)
+        { period: `IS-Q2-${year}`, month: 5 },   // June (index 5)
+        { period: `IS-Q3-${year}`, month: 8 },   // Sept (index 8)
+        { period: `IS-Q4-${year}`, month: 11 },  // Dec (index 11)
+      ]
+
+      let created = 0
+      let lastError = ''
+      for (const q of quarters) {
+        const dueDate = new Date(year, q.month, 15)
+        try {
+          const res = await fetch('/api/declarations', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              type: 'IS',
+              year,
+              period: q.period,
+              amount: acompteAmount,
+              dueDate: dueDate.toISOString(),
+            })
+          })
+          const data = await res.json()
+          if (data.success) {
+            created++
+          } else {
+            lastError = data.error || 'Erreur inconnue'
+          }
+        } catch (fetchError) {
+          lastError = 'Erreur réseau - impossible de contacter le serveur'
+        }
+      }
+
+      if (created > 0) {
+        alert(`${created} acompte(s) IS créé(s) pour l'exercice ${year} (${formatCurrency(acompteAmount)} par acompte)`)
         fetchDeclarations()
       } else {
-        alert('Erreur: ' + (data.error || 'Erreur inconnue'))
+        alert(`Erreur: ${lastError}\n\nVérifiez que la base de données est synchronisée (relancez un déploiement Vercel si nécessaire).`)
       }
     } catch (error) {
       console.error('Error generating IS declaration:', error)
@@ -248,11 +272,13 @@ export function DeclarationsSection({ settings }: DeclarationsSectionProps) {
         alert(`Déclaration TVA CA12 générée pour l'exercice ${year}`)
         fetchDeclarations()
       } else {
-        alert('Erreur: ' + (data.error || 'Erreur inconnue'))
+        const errorMsg = data.error || 'Erreur inconnue'
+        const details = data.details ? `\n\nDétails: ${data.details}` : ''
+        alert(`Erreur: ${errorMsg}${details}\n\nSi le problème persiste, relancez un déploiement sur Vercel.`)
       }
     } catch (error) {
       console.error('Error generating TVA declaration:', error)
-      alert('Erreur lors de la génération')
+      alert('Erreur réseau - impossible de contacter le serveur')
     }
   }
 
@@ -563,7 +589,7 @@ export function DeclarationsSection({ settings }: DeclarationsSectionProps) {
                 </div>
                 <Button onClick={() => generateISDeclaration(selectedYear)}>
                   <FileText className="h-4 w-4 mr-2" />
-                  Générer
+                  Créer les 4 acomptes IS
                 </Button>
               </div>
             </CardContent>

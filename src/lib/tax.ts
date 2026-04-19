@@ -265,31 +265,36 @@ export function calculateCashFlow(
   return result
 }
 
-// Default transaction categories
+// Default transaction categories with correct French TVA rates
+// TVA rates: 0.20 (normal), 0.10 (intermédiaire), 0.055 (réduit), 0 (exonéré/NC)
 export const DEFAULT_CATEGORIES = [
   // Income
-  { name: 'Prestations de services', type: 'income', color: '#22C55E', icon: 'briefcase', taxDeductible: false },
-  { name: 'Ventes de produits', type: 'income', color: '#10B981', icon: 'shopping-cart', taxDeductible: false },
-  { name: 'Autres revenus', type: 'income', color: '#34D399', icon: 'plus', taxDeductible: false },
-  
-  // Expenses - Business
-  { name: 'Fournitures de bureau', type: 'expense', color: '#EF4444', icon: 'paperclip', taxDeductible: true },
-  { name: 'Logiciels & Abonnements', type: 'expense', color: '#F97316', icon: 'monitor', taxDeductible: true },
-  { name: 'Télécommunications', type: 'expense', color: '#F59E0B', icon: 'phone', taxDeductible: true },
-  { name: 'Loyer & Charges', type: 'expense', color: '#EAB308', icon: 'home', taxDeductible: true },
-  { name: 'Assurances', type: 'expense', color: '#84CC16', icon: 'shield', taxDeductible: true },
-  { name: 'Frais bancaires', type: 'expense', color: '#06B6D4', icon: 'credit-card', taxDeductible: true },
-  { name: 'Frais de déplacement', type: 'expense', color: '#0EA5E9', icon: 'car', taxDeductible: true },
-  { name: 'Formation', type: 'expense', color: '#3B82F6', icon: 'book', taxDeductible: true },
-  { name: 'Publicité & Marketing', type: 'expense', color: '#6366F1', icon: 'megaphone', taxDeductible: true },
-  { name: 'Honoraires (comptable, avocat)', type: 'expense', color: '#8B5CF6', icon: 'user', taxDeductible: true },
-  { name: 'Materiel informatique', type: 'expense', color: '#A855F7', icon: 'laptop', taxDeductible: true },
-  { name: 'Repas professionnels', type: 'expense', color: '#D946EF', icon: 'utensils', taxDeductible: true },
-  { name: 'Cotisations sociales', type: 'expense', color: '#EC4899', icon: 'heart', taxDeductible: true },
-  { name: 'Impôts et taxes', type: 'expense', color: '#F43F5E', icon: 'file-text', taxDeductible: false },
-  { name: 'Rémunération', type: 'expense', color: '#71717A', icon: 'user-check', taxDeductible: true },
-  { name: 'Dividendes', type: 'expense', color: '#71717A', icon: 'dollar-sign', taxDeductible: false },
-  { name: 'Dépenses diverses justifiées', type: 'expense', color: '#78716C', icon: 'receipt', taxDeductible: true },
-  { name: 'Retrait espèces', type: 'expense', color: '#A8A29E', icon: 'wallet', taxDeductible: false },
-  { name: 'Non catégorisé', type: 'expense', color: '#94A3B8', icon: 'help-circle', taxDeductible: false },
+  { name: 'Prestations de services', type: 'income', color: '#22C55E', icon: 'briefcase', taxDeductible: false, defaultTvaRate: 0.20 },
+  { name: 'Ventes de produits', type: 'income', color: '#10B981', icon: 'shopping-cart', taxDeductible: false, defaultTvaRate: 0.20 },
+  { name: 'Autres revenus', type: 'income', color: '#34D399', icon: 'plus', taxDeductible: false, defaultTvaRate: 0.20 },
+
+  // Expenses - Business (20% TVA)
+  { name: 'Fournitures de bureau', type: 'expense', color: '#EF4444', icon: 'paperclip', taxDeductible: true, defaultTvaRate: 0.20 },
+  { name: 'Logiciels & Abonnements', type: 'expense', color: '#F97316', icon: 'monitor', taxDeductible: true, defaultTvaRate: 0.20 },
+  { name: 'Télécommunications', type: 'expense', color: '#F59E0B', icon: 'phone', taxDeductible: true, defaultTvaRate: 0.20 },
+  { name: 'Loyer & Charges', type: 'expense', color: '#EAB308', icon: 'home', taxDeductible: true, defaultTvaRate: 0.20 },
+  { name: 'Assurances', type: 'expense', color: '#84CC16', icon: 'shield', taxDeductible: true, defaultTvaRate: 0.20 },
+  { name: 'Formation', type: 'expense', color: '#3B82F6', icon: 'book', taxDeductible: true, defaultTvaRate: 0.20 },
+  { name: 'Publicité & Marketing', type: 'expense', color: '#6366F1', icon: 'megaphone', taxDeductible: true, defaultTvaRate: 0.20 },
+  { name: 'Honoraires (comptable, avocat)', type: 'expense', color: '#8B5CF6', icon: 'user', taxDeductible: true, defaultTvaRate: 0.20 },
+  { name: 'Materiel informatique', type: 'expense', color: '#A855F7', icon: 'laptop', taxDeductible: true, defaultTvaRate: 0.20 },
+  { name: 'Dépenses diverses justifiées', type: 'expense', color: '#78716C', icon: 'receipt', taxDeductible: true, defaultTvaRate: 0.20 },
+
+  // Expenses - 10% TVA (taux intermédiaire)
+  { name: 'Frais de déplacement', type: 'expense', color: '#0EA5E9', icon: 'car', taxDeductible: true, defaultTvaRate: 0.10 },
+  { name: 'Repas professionnels', type: 'expense', color: '#D946EF', icon: 'utensils', taxDeductible: true, defaultTvaRate: 0.10 },
+
+  // Expenses - 0% TVA (exonérés / hors champ)
+  { name: 'Frais bancaires', type: 'expense', color: '#06B6D4', icon: 'credit-card', taxDeductible: true, defaultTvaRate: 0 },
+  { name: 'Cotisations sociales', type: 'expense', color: '#EC4899', icon: 'heart', taxDeductible: true, defaultTvaRate: 0 },
+  { name: 'Rémunération', type: 'expense', color: '#71717A', icon: 'user-check', taxDeductible: true, defaultTvaRate: 0 },
+  { name: 'Impôts et taxes', type: 'expense', color: '#F43F5E', icon: 'file-text', taxDeductible: false, defaultTvaRate: 0 },
+  { name: 'Dividendes', type: 'expense', color: '#71717A', icon: 'dollar-sign', taxDeductible: false, defaultTvaRate: 0 },
+  { name: 'Retrait espèces', type: 'expense', color: '#A8A29E', icon: 'wallet', taxDeductible: false, defaultTvaRate: 0 },
+  { name: 'Non catégorisé', type: 'expense', color: '#94A3B8', icon: 'help-circle', taxDeductible: false, defaultTvaRate: 0 },
 ]

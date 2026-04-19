@@ -99,9 +99,12 @@ export async function POST(request: NextRequest) {
     let tvaDeductibleImmobilisations = 0
 
     for (const t of expenseTransactions) {
-      const amount = Math.abs(t.amount)
-      // Estimate TVA at 20% for all tax-deductible expenses
-      tvaDeductibleBiensServices += amount * 0.20
+      const amountTTC = Math.abs(t.amount)
+      const rate = t.category?.defaultTvaRate ?? 0.20
+      // Correct TTC → TVA formula: TVA = amountTTC × rate / (1 + rate)
+      if (rate > 0) {
+        tvaDeductibleBiensServices += amountTTC * rate / (1 + rate)
+      }
     }
 
     // Apply optional overrides

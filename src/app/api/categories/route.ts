@@ -5,7 +5,7 @@ import { DEFAULT_CATEGORIES } from '@/lib/tax'
 // Initialize default categories
 export async function GET() {
   try {
-    // Ensure all default categories exist
+    // Ensure all default categories exist with correct TVA rates
     for (const cat of DEFAULT_CATEGORIES) {
       const existing = await db.category.findFirst({
         where: { name: cat.name }
@@ -19,7 +19,14 @@ export async function GET() {
             color: cat.color,
             icon: cat.icon,
             taxDeductible: cat.taxDeductible,
+            defaultTvaRate: cat.defaultTvaRate,
           },
+        })
+      } else if ((existing.defaultTvaRate ?? 0.20) !== cat.defaultTvaRate) {
+        // Sync correct TVA rate on existing categories
+        await db.category.update({
+          where: { id: existing.id },
+          data: { defaultTvaRate: cat.defaultTvaRate }
         })
       }
     }

@@ -91,12 +91,13 @@ model Category {
   color       String   @default("#3B82F6")
   icon        String?
   isDefault   Boolean  @default(false)
-  taxDeductible Boolean @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  transactions Transaction[]
-  expenses    Expense[]
-  rules       CategoryRule[]
+  taxDeductible  Boolean @default(true)
+  defaultTvaRate Float   @default(0.20) // TVA rate for this category: 0, 0.055, 0.10, 0.20
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  transactions   Transaction[]
+  expenses       Expense[]
+  rules          CategoryRule[]
 }
 
 // Bank transactions from CSV

@@ -116,7 +116,7 @@ export function DeclarationsSection({ settings }: DeclarationsSectionProps) {
       // Fiscal year YYYY runs from Dec 1 (YYYY-1) to Nov 30 (YYYY)
       const fyData: Record<number, FiscalYearData> = {}
       
-      transactions.forEach((t: { date: string; amount: number }) => {
+      transactions.forEach((t: { date: string; amount: number; category?: { defaultTvaRate?: number; taxDeductible?: boolean } }) => {
         const date = new Date(t.date)
         const year = date.getFullYear()
         const month = date.getMonth() + 1 // 1-12
@@ -146,10 +146,19 @@ export function DeclarationsSection({ settings }: DeclarationsSectionProps) {
 
         if (t.amount > 0) {
           fyData[fy].income += t.amount
-          fyData[fy].tvaCollectee += t.amount * 0.20 // 20% TVA
+          // Income TVA: use category rate with TTC formula
+          const inRate = t.category?.defaultTvaRate ?? 0.20
+          if (inRate > 0) {
+            fyData[fy].tvaCollectee += t.amount * inRate / (1 + inRate)
+          }
         } else {
           fyData[fy].expenses += Math.abs(t.amount)
-          fyData[fy].tvaDeductible += Math.abs(t.amount) * 0.20 // 20% TVA
+          // Expense TVA déductible: use category rate with TTC formula
+          const expRate = t.category?.defaultTvaRate ?? 0.20
+          const isDeductible = t.category?.taxDeductible ?? true
+          if (isDeductible && expRate > 0) {
+            fyData[fy].tvaDeductible += Math.abs(t.amount) * expRate / (1 + expRate)
+          }
         }
       })
 

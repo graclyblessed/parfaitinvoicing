@@ -1,5 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { DEFAULT_CATEGORIES } from '@/lib/tax'
+
+// Sync category TVA rates (ensures existing categories have correct rates after schema update)
+async function syncCategoryTvaRates() {
+  for (const cat of DEFAULT_CATEGORIES) {
+    await db.category.updateMany({
+      where: { name: cat.name, defaultTvaRate: { not: cat.defaultTvaRate } },
+      data: { defaultTvaRate: cat.defaultTvaRate }
+    })
+  }
+}
 
 // GET - List all formulaire3517S records or get specific year
 export async function GET(request: NextRequest) {
@@ -44,6 +55,9 @@ export async function POST(request: NextRequest) {
     console.log(`Generating Formulaire 3517-S for fiscal year ${targetYear}`)
     console.log(`Date range: ${startDate.toISOString()} to ${endDate.toISOString()}`)
 
+    // 0. Sync category TVA rates first (ensures NULL values get updated)
+    await syncCategoryTvaRates()
+
     // 1. TVA Collectée from invoices (status != 'cancelled')
     const invoices = await db.invoice.findMany({
       where: {
@@ -59,6 +73,7 @@ export async function POST(request: NextRequest) {
     let baseHT55 = 0, tvaCollectee55 = 0
     let baseHT21 = 0, tvaCollectee21 = 0
 
+    // TVA collectée from invoices (exact amounts)
     for (const inv of invoices) {
       const ht = inv.subtotalHT
       const tva = inv.tvaAmount
@@ -67,6 +82,35 @@ export async function POST(request: NextRequest) {
         case 10: baseHT10 += ht; tvaCollectee10 += tva; break
         case 5.5: baseHT55 += ht; tvaCollectee55 += tva; break
         case 2.1: baseHT21 += ht; tvaCollectee21 += tva; break
+      }
+    }
+
+    // TVA collectée from income transactions (when no formal invoice exists)
+    const incomeTransactions = await db.transaction.findMany({
+      where: {
+        date: { gte: startDate, lte: endDate },
+        type: 'income',
+        labeled: true,
+      },
+      include: { category: true }
+    })
+
+    console.log(`Found ${incomeTransactions.length} income transactions for TVA collectée`)
+
+    for (const t of incomeTransactions) {
+      const amountTTC = Math.abs(t.amount)
+      const rate = t.category?.defaultTvaRate ?? 0.20
+      if (rate > 0) {
+        // TTC → HT: HT = TTC / (1 + rate)
+        const ht = amountTTC / (1 + rate)
+        const tva = amountTTC - ht
+        switch (rate) {
+          case 0.20: baseHT20 += ht; tvaCollectee20 += tva; break
+          case 0.10: baseHT10 += ht; tvaCollectee10 += tva; break
+          case 0.055: baseHT55 += ht; tvaCollectee55 += tva; break
+          case 0.021: baseHT21 += ht; tvaCollectee21 += tva; break
+          default: baseHT20 += ht; tvaCollectee20 += tva; break
+        }
       }
     }
 
@@ -80,7 +124,7 @@ export async function POST(request: NextRequest) {
     if (tvaInputs.baseHT21 !== undefined) baseHT21 = tvaInputs.baseHT21
     if (tvaInputs.tvaCollectee21 !== undefined) tvaCollectee21 = tvaInputs.tvaCollectee21
 
-    const nombreVentes = invoices.length
+    const nombreVentes = invoices.length + incomeTransactions.length
 
     // 2. TVA Déductible from transactions (expenses with tax-deductible categories)
     const expenseTransactions = await db.transaction.findMany({

@@ -3,13 +3,17 @@ import { db } from '@/lib/db'
 import { DEFAULT_CATEGORIES } from '@/lib/tax'
 
 // Sync category TVA rates (ensures existing categories have correct rates after schema update)
+// Note: must handle NULL values explicitly because SQL NULL != value returns NULL (falsy)
 async function syncCategoryTvaRates() {
+  let updated = 0
   for (const cat of DEFAULT_CATEGORIES) {
-    await db.category.updateMany({
-      where: { name: cat.name, defaultTvaRate: { not: cat.defaultTvaRate } },
+    const result = await db.category.updateMany({
+      where: { name: cat.name },
       data: { defaultTvaRate: cat.defaultTvaRate }
     })
+    updated += result.count
   }
+  console.log(`[TVA Sync] Updated ${updated} categories with correct TVA rates`)
 }
 
 // GET - List all formulaire3517S records or get specific year
@@ -141,14 +145,32 @@ export async function POST(request: NextRequest) {
 
     let tvaDeductibleBiensServices = 0
     let tvaDeductibleImmobilisations = 0
+    const categoryBreakdown: Record<string, { count: number; totalAmount: number; tvaAmount: number; rate: number }> = {}
 
     for (const t of expenseTransactions) {
       const amountTTC = Math.abs(t.amount)
       const rate = t.category?.defaultTvaRate ?? 0.20
+      const catName = t.category?.name || 'Non catégorisé'
+      
+      // Initialize breakdown entry
+      if (!categoryBreakdown[catName]) {
+        categoryBreakdown[catName] = { count: 0, totalAmount: 0, tvaAmount: 0, rate }
+      }
+      categoryBreakdown[catName].count++
+      categoryBreakdown[catName].totalAmount += amountTTC
+      
       // Correct TTC → TVA formula: TVA = amountTTC × rate / (1 + rate)
       if (rate > 0) {
-        tvaDeductibleBiensServices += amountTTC * rate / (1 + rate)
+        const tva = amountTTC * rate / (1 + rate)
+        tvaDeductibleBiensServices += tva
+        categoryBreakdown[catName].tvaAmount += tva
       }
+    }
+
+    // Log detailed breakdown for debugging
+    console.log(`[TVA Déductible] Category breakdown:`)
+    for (const [catName, data] of Object.entries(categoryBreakdown)) {
+      console.log(`  ${catName}: ${data.count} txns, TTC=${data.totalAmount.toFixed(2)}€, rate=${data.rate}, TVA=${data.tvaAmount.toFixed(2)}€`)
     }
 
     // Apply optional overrides
@@ -252,11 +274,13 @@ export async function POST(request: NextRequest) {
       formulaire,
       summary: {
         invoices: invoices.length,
+        incomeTransactions: incomeTransactions.length,
         expenseTransactions: expenseTransactions.length,
         totalTVABrute,
         totalTVADeductible,
         tvaNette,
         totalAPayer,
+        categoryBreakdown,
       }
     })
   } catch (error) {

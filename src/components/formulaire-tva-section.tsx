@@ -128,7 +128,23 @@ export function FormulaireTVASection({ settings }: FormulaireTVASectionProps) {
       if (data.success) {
         setForm(data.formulaire)
         fetchForms()
-        alert(`Formulaire 3517-S généré pour l'exercice ${selectedYear}!`)
+        
+        // Show detailed breakdown
+        const s = data.summary
+        let msg = `Formulaire 3517-S généré pour l'exercice ${selectedYear}!\n\n`
+        msg += `TVA collectée: ${s.invoices} facture(s) + ${s.incomeTransactions} transaction(s) revenu → ${(s.totalTVABrute || 0).toFixed(2)}€\n`
+        msg += `TVA déductible: ${s.expenseTransactions} transactions achat → ${(s.totalTVADeductible || 0).toFixed(2)}€\n\n`
+        
+        if (s.categoryBreakdown) {
+          msg += `Détail par catégorie:\n`
+          for (const [cat, info] of Object.entries(s.categoryBreakdown as Record<string, { count: number; totalAmount: number; tvaAmount: number; rate: number }>)) {
+            const rateStr = `${(info.rate * 100).toFixed(0)}%`
+            msg += `  • ${cat}: ${info.count} txn(s), TTC=${info.totalAmount.toFixed(2)}€, TVA=${info.tvaAmount.toFixed(2)}€ (taux ${rateStr})\n`
+          }
+        }
+        
+        msg += `\nTVA nette due: ${(s.tvaNette || 0).toFixed(2)}€`
+        alert(msg)
       } else {
         alert('Erreur: ' + (data.error || 'Erreur inconnue'))
       }

@@ -22,8 +22,8 @@ export async function GET() {
             defaultTvaRate: cat.defaultTvaRate,
           },
         })
-      } else if ((existing.defaultTvaRate ?? 0.20) !== cat.defaultTvaRate) {
-        // Sync correct TVA rate on existing categories
+      } else {
+        // Always sync correct TVA rate (handles NULL values too)
         await db.category.update({
           where: { id: existing.id },
           data: { defaultTvaRate: cat.defaultTvaRate }

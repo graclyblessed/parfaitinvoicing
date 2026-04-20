@@ -15,6 +15,7 @@ import {
   FileText, Download, Loader2, Plus, Trash2, Send, CheckCircle, XCircle,
   ArrowRight, Eye, Mail, Euro, Calculator
 } from 'lucide-react'
+import { toast } from 'sonner'
 
 interface DevisItem {
   description: string
@@ -130,11 +131,11 @@ export function DevisSection({ settings }: DevisSectionProps) {
   // Create devis
   const createDevis = async () => {
     if (!clientName) {
-      alert('Veuillez entrer le nom du client')
+      toast.warning('Veuillez entrer le nom du client')
       return
     }
     if (items.some(item => !item.description || item.unitPrice <= 0)) {
-      alert('Veuillez remplir tous les articles avec un prix valide')
+      toast.warning('Veuillez remplir tous les articles avec un prix valide')
       return
     }
 
@@ -157,16 +158,16 @@ export function DevisSection({ settings }: DevisSectionProps) {
       })
       const data = await res.json()
       if (data.devis) {
-        alert(`Devis ${data.devis.devisNumber} créé!`)
+        toast.success(`Devis ${data.devis.devisNumber} créé!`)
         setShowForm(false)
         resetForm()
         fetchDevis()
       } else {
-        alert('Erreur: ' + (data.error || 'Erreur inconnue'))
+        toast.error('Erreur: ' + (data.error || 'Erreur inconnue'))
       }
     } catch (error) {
       console.error('Error creating devis:', error)
-      alert('Erreur lors de la création')
+      toast.error('Erreur lors de la création')
     } finally {
       setSaving(false)
     }
@@ -194,7 +195,7 @@ export function DevisSection({ settings }: DevisSectionProps) {
         body: JSON.stringify({ id, status: 'sent', sentAt: new Date().toISOString() }),
       })
       fetchDevis()
-      alert('Devis marqué comme envoyé!')
+      toast.success('Devis marqué comme envoyé!')
     } catch (error) {
       console.error('Error sending devis:', error)
     }
@@ -209,7 +210,7 @@ export function DevisSection({ settings }: DevisSectionProps) {
         body: JSON.stringify({ id, status: 'accepted', acceptedAt: new Date().toISOString() }),
       })
       fetchDevis()
-      alert('Devis accepté!')
+      toast.success('Devis accepté!')
     } catch (error) {
       console.error('Error accepting devis:', error)
     }
@@ -224,7 +225,7 @@ export function DevisSection({ settings }: DevisSectionProps) {
         body: JSON.stringify({ id, status: 'rejected' }),
       })
       fetchDevis()
-      alert('Devis refusé')
+      toast.success('Devis refusé')
     } catch (error) {
       console.error('Error rejecting devis:', error)
     }
@@ -239,14 +240,14 @@ export function DevisSection({ settings }: DevisSectionProps) {
       })
       const data = await res.json()
       if (data.invoice) {
-        alert(`Facture ${data.invoice.invoiceNumber} créée à partir du devis!`)
+        toast.success(`Facture ${data.invoice.invoiceNumber} créée à partir du devis!`)
         fetchDevis()
       } else {
-        alert('Erreur: ' + (data.error || 'Erreur inconnue'))
+        toast.error('Erreur: ' + (data.error || 'Erreur inconnue'))
       }
     } catch (error) {
       console.error('Error converting devis:', error)
-      alert('Erreur lors de la conversion')
+      toast.error('Erreur lors de la conversion')
     } finally {
       setConverting(null)
     }

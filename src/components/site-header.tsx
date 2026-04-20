@@ -1,6 +1,7 @@
 'use client'
 
-import { Bell, LogOut, User, Settings } from 'lucide-react'
+import { Suspense } from 'react'
+import { Bell, LogOut, Settings } from 'lucide-react'
 import { signOut, useSession } from 'next-auth/react'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
@@ -15,11 +16,27 @@ import {
 import { SidebarTrigger } from '@/components/ui/sidebar'
 import { Badge } from '@/components/ui/badge'
 import { Breadcrumb, BreadcrumbItem, BreadcrumbList, BreadcrumbPage } from '@/components/ui/breadcrumb'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 
-export function SiteHeader() {
+const tabNames: Record<string, string> = {
+  overview: 'Tableau de bord',
+  transactions: 'Transactions',
+  deadlines: 'Échéances',
+  invoices: 'Factures',
+  devis: 'Devis',
+  liasse: 'Liasse Fiscale',
+  'formulaire-is': 'Formulaires IS',
+  'formulaire-tva': 'TVA (CA3/3517-S)',
+  declarations: 'Déclarations',
+  settings: 'Paramètres',
+}
+
+function SiteHeaderInner() {
   const { data: session } = useSession()
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const currentTab = searchParams.get('tab') || 'overview'
+  const currentPageName = tabNames[currentTab] || 'Tableau de bord'
 
   const handleSignOut = async () => {
     await signOut({ callbackUrl: '/login' })
@@ -33,7 +50,7 @@ export function SiteHeader() {
         <BreadcrumbList>
           <BreadcrumbItem>
             <BreadcrumbPage className="text-sm font-medium">
-              Tableau de bord
+              {currentPageName}
             </BreadcrumbPage>
           </BreadcrumbItem>
         </BreadcrumbList>
@@ -105,5 +122,27 @@ export function SiteHeader() {
         </DropdownMenu>
       </div>
     </header>
+  )
+}
+
+export function SiteHeader() {
+  return (
+    <Suspense fallback={
+      <header className="flex h-14 shrink-0 items-center gap-2 border-b bg-background px-4">
+        <SidebarTrigger className="-ml-1" />
+        <Separator orientation="vertical" className="mr-2 h-4" />
+        <Breadcrumb>
+          <BreadcrumbList>
+            <BreadcrumbItem>
+              <BreadcrumbPage className="text-sm font-medium">
+                Tableau de bord
+              </BreadcrumbPage>
+            </BreadcrumbItem>
+          </BreadcrumbList>
+        </Breadcrumb>
+      </header>
+    }>
+      <SiteHeaderInner />
+    </Suspense>
   )
 }

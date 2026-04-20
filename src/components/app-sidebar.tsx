@@ -9,6 +9,8 @@ import {
   ArrowUpDown,
   CalendarDays,
   FileText,
+  FileSignature,
+  BookOpen,
   Settings,
   HelpCircle,
   LogOut,
@@ -16,6 +18,8 @@ import {
   ChevronUp,
   Loader2,
   FileCheck,
+  Receipt,
+  ClipboardList,
 } from 'lucide-react'
 import {
   Sidebar,
@@ -47,7 +51,11 @@ const navigation = [
       { name: 'Transactions', href: '/?tab=transactions', icon: ArrowUpDown, tab: 'transactions' },
       { name: 'Échéances', href: '/?tab=deadlines', icon: CalendarDays, tab: 'deadlines' },
       { name: 'Factures', href: '/?tab=invoices', icon: FileText, tab: 'invoices' },
+      { name: 'Devis', href: '/?tab=devis', icon: FileSignature, tab: 'devis' },
+      { name: 'Liasse Fiscale', href: '/?tab=liasse', icon: BookOpen, tab: 'liasse' },
       { name: 'Formulaires IS', href: '/?tab=formulaire-is', icon: FileCheck, tab: 'formulaire-is' },
+      { name: 'TVA (CA3/3517-S)', href: '/?tab=formulaire-tva', icon: Receipt, tab: 'formulaire-tva' },
+      { name: 'Déclarations', href: '/?tab=declarations', icon: ClipboardList, tab: 'declarations' },
     ],
   },
   {

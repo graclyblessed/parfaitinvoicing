@@ -16,6 +16,7 @@ import {
   AlertCircle, CheckCircle, Info, Copy, Check, Clipboard,
   ExternalLink, RefreshCw, Save, HelpCircle
 } from 'lucide-react'
+import { toast } from 'sonner'
 
 interface Settings {
   companyName: string
@@ -218,13 +219,13 @@ export function FormulaireISSection({ settings, transactions }: FormulaireISSect
       if (data.success) {
         setForm2572(data.formulaire)
         fetchForms()
-        alert(`Formulaire 2572 généré pour l'exercice ${selectedYear}!`)
+        toast.success(`Formulaire 2572 généré pour l'exercice ${selectedYear}!`)
       } else {
-        alert('Erreur: ' + (data.error || 'Erreur inconnue'))
+        toast.error('Erreur: ' + (data.error || 'Erreur inconnue'))
       }
     } catch (error) {
       console.error('Error generating 2572:', error)
-      alert('Erreur lors de la génération')
+      toast.error('Erreur lors de la génération')
     } finally {
       setGenerating(false)
     }
@@ -242,13 +243,13 @@ export function FormulaireISSection({ settings, transactions }: FormulaireISSect
       if (data.success) {
         setForm2065(data.formulaire)
         fetchForms()
-        alert(`Formulaire 2065 généré pour l'exercice ${selectedYear}!`)
+        toast.success(`Formulaire 2065 généré pour l'exercice ${selectedYear}!`)
       } else {
-        alert('Erreur: ' + (data.error || 'Erreur inconnue'))
+        toast.error('Erreur: ' + (data.error || 'Erreur inconnue'))
       }
     } catch (error) {
       console.error('Error generating 2065:', error)
-      alert('Erreur lors de la génération')
+      toast.error('Erreur lors de la génération')
     } finally {
       setGenerating(false)
     }
@@ -266,7 +267,7 @@ export function FormulaireISSection({ settings, transactions }: FormulaireISSect
       const data = await res.json()
       if (data.success) {
         setForm2572(data.formulaire)
-        alert('Formulaire 2572 mis à jour!')
+        toast.success('Formulaire 2572 mis à jour!')
       }
     } catch (error) {
       console.error('Error saving 2572:', error)
@@ -287,7 +288,7 @@ export function FormulaireISSection({ settings, transactions }: FormulaireISSect
       const data = await res.json()
       if (data.success) {
         setForm2065(data.formulaire)
-        alert('Formulaire 2065 mis à jour!')
+        toast.success('Formulaire 2065 mis à jour!')
       }
     } catch (error) {
       console.error('Error saving 2065:', error)

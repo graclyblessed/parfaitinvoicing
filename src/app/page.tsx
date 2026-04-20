@@ -1,6 +1,8 @@
 'use client'
 
 import { useState, useEffect, Suspense } from 'react'
+import { toast } from 'sonner'
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog'
 import { useSearchParams, usePathname, useRouter } from 'next/navigation'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -299,6 +301,11 @@ function TaxDashboardContent() {
     currentPage * itemsPerPage
   )
 
+  // Delete dialog state
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [deleteDialogMessage, setDeleteDialogMessage] = useState('')
+  const [deleteDialogCallback, setDeleteDialogCallback] = useState<(() => void) | null>(null)
+
   // Handle CSV upload
   const handleUpload = async () => {
     if (!selectedFile) return
@@ -320,7 +327,7 @@ function TaxDashboardContent() {
         if (data.parseErrors && data.parseErrors.length > 0) {
           console.log('Parse errors:', data.parseErrors)
         }
-        alert(message)
+        toast.success(message)
         fetchAllData()
       } else {
         // Show detailed error message
@@ -331,12 +338,12 @@ function TaxDashboardContent() {
         if (data.parseErrors && data.parseErrors.length > 0) {
           errorMsg += `\n\nErreurs de parsing:\n${data.parseErrors.slice(0, 5).join('\n')}`
         }
-        alert(errorMsg)
+        toast.error(errorMsg)
         console.error('Upload failed:', data)
       }
     } catch (error) {
       console.error('Upload error:', error)
-      alert('Erreur de connexion au serveur')
+      toast.error('Erreur de connexion au serveur')
     } finally {
       setUploading(false)
       setSelectedFile(null)
@@ -366,14 +373,14 @@ function TaxDashboardContent() {
       })
       const data = await res.json()
       if (data.success) {
-        alert(`${data.categorized} transactions catégorisées automatiquement sur ${data.total}`)
+        toast.success(`${data.categorized} transactions catégorisées automatiquement sur ${data.total}`)
         fetchAllData()
       } else {
-        alert('Erreur: ' + (data.error || 'Erreur inconnue'))
+        toast.error('Erreur: ' + (data.error || 'Erreur inconnue'))
       }
     } catch (error) {
       console.error('Auto-categorize error:', error)
-      alert('Erreur de connexion')
+      toast.error('Erreur de connexion')
     } finally {
       setAutoCategorizing(false)
     }
@@ -396,11 +403,11 @@ function TaxDashboardContent() {
       if (data.success) {
         fetchAllData()
       } else {
-        alert('Erreur: ' + (data.error || 'Erreur inconnue'))
+        toast.error('Erreur: ' + (data.error || 'Erreur inconnue'))
       }
     } catch (error) {
       console.error('Receipt upload error:', error)
-      alert('Erreur lors du téléchargement')
+      toast.error('Erreur lors du téléchargement')
     } finally {
       setUploadingReceiptFor(null)
     }
@@ -408,8 +415,14 @@ function TaxDashboardContent() {
 
   // Delete receipt
   const deleteReceipt = async (transactionId: string) => {
-    if (!confirm('Supprimer ce justificatif ?')) return
-    
+    setDeleteDialogMessage('Supprimer ce justificatif ?')
+    setDeleteDialogCallback(() => () => {
+      performDeleteReceipt(transactionId)
+    })
+    setDeleteDialogOpen(true)
+  }
+
+  const performDeleteReceipt = async (transactionId: string) => {
     try {
       const res = await fetch(`/api/transactions/receipt?transactionId=${transactionId}`, {
         method: 'DELETE',
@@ -417,10 +430,11 @@ function TaxDashboardContent() {
       const data = await res.json()
       
       if (data.success) {
+        toast.success('Justificatif supprimé')
         fetchAllData()
         setShowReceiptModal(null)
       } else {
-        alert('Erreur: ' + (data.error || 'Erreur inconnue'))
+        toast.error('Erreur: ' + (data.error || 'Erreur inconnue'))
       }
     } catch (error) {
       console.error('Receipt delete error:', error)
@@ -448,7 +462,7 @@ function TaxDashboardContent() {
         }),
       })
       fetchAllData()
-      alert('Paramètres enregistrés!')
+      toast.success('Paramètres enregistrés!')
     } catch (error) {
       console.error('Error updating settings:', error)
     }
@@ -517,11 +531,11 @@ function TaxDashboardContent() {
   // Create invoice
   const createInvoice = async () => {
     if (!invoiceClient.name) {
-      alert('Veuillez entrer le nom du client')
+      toast.warning('Veuillez entrer le nom du client')
       return
     }
     if (invoiceItems.some(item => !item.description || item.unitPrice <= 0)) {
-      alert('Veuillez remplir tous les articles')
+      toast.warning('Veuillez remplir tous les articles')
       return
     }
 
@@ -540,7 +554,7 @@ function TaxDashboardContent() {
       })
       const data = await res.json()
       if (data.invoice) {
-        alert(`Facture ${data.invoice.invoiceNumber} créée!`)
+        toast.success(`Facture ${data.invoice.invoiceNumber} créée!`)
         setShowInvoiceForm(false)
         setInvoiceItems([{ description: '', quantity: 1, unitPrice: 0 }])
         setInvoiceClient({ name: '', address: '', siret: '', tva: '' })
@@ -1161,7 +1175,7 @@ function TaxDashboardContent() {
                   <p className="text-sm mt-2">Importez un fichier CSV pour commencer</p>
                 </div>
               ) : (
-                <div className="rounded-md border">
+                <div className="rounded-md border overflow-x-auto">
                   <Table>
                     <TableHeader>
                       <TableRow>
@@ -1332,7 +1346,7 @@ function TaxDashboardContent() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="pt-4">
-                <div className="rounded-md border border-blue-200 overflow-hidden">
+                <div className="rounded-md border border-blue-200 overflow-x-auto">
                   <Table>
                     <TableHeader>
                       <TableRow className="bg-blue-50/50">
@@ -1388,7 +1402,7 @@ function TaxDashboardContent() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="pt-4">
-                <div className="rounded-md border border-amber-200 overflow-hidden">
+                <div className="rounded-md border border-amber-200 overflow-x-auto">
                   <Table>
                     <TableHeader>
                       <TableRow className="bg-amber-50/50">
@@ -1444,7 +1458,7 @@ function TaxDashboardContent() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="pt-4">
-                <div className="rounded-md border border-purple-200 overflow-hidden">
+                <div className="rounded-md border border-purple-200 overflow-x-auto">
                   <Table>
                     <TableHeader>
                       <TableRow className="bg-purple-50/50">
@@ -1500,7 +1514,7 @@ function TaxDashboardContent() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="pt-4">
-                <div className="rounded-md border border-emerald-200 overflow-hidden">
+                <div className="rounded-md border border-emerald-200 overflow-x-auto">
                   <Table>
                     <TableHeader>
                       <TableRow className="bg-emerald-50/50">
@@ -1556,7 +1570,7 @@ function TaxDashboardContent() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="pt-4">
-                <div className="rounded-md border border-teal-200 overflow-hidden">
+                <div className="rounded-md border border-teal-200 overflow-x-auto">
                   <Table>
                     <TableHeader>
                       <TableRow className="bg-teal-50/50">
@@ -1762,7 +1776,7 @@ function TaxDashboardContent() {
                   <p className="text-sm mt-2">Créez votre première facture</p>
                 </div>
               ) : (
-                <div className="rounded-md border">
+                <div className="rounded-md border overflow-x-auto">
                   <Table>
                     <TableHeader>
                       <TableRow>
@@ -1962,24 +1976,27 @@ function TaxDashboardContent() {
                           variant="ghost" 
                           size="sm" 
                           className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                          onClick={async () => {
-                            if (!confirm(`Supprimer la catégorie "${cat.name}" ?`)) return
-                            try {
-                              const res = await fetch('/api/categories/delete-unused', {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ name: cat.name })
-                              })
-                              const data = await res.json()
-                              if (data.success) {
-                                alert(`Catégorie "${cat.name}" supprimée`)
-                                fetchAllData()
-                              } else {
-                                alert(data.error || 'Erreur')
+                          onClick={() => {
+                            setDeleteDialogMessage(`Supprimer la catégorie "${cat.name}" ?`)
+                            setDeleteDialogCallback(() => async () => {
+                              try {
+                                const res = await fetch('/api/categories/delete-unused', {
+                                  method: 'POST',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({ name: cat.name })
+                                })
+                                const data = await res.json()
+                                if (data.success) {
+                                  toast.success(`Catégorie "${cat.name}" supprimée`)
+                                  fetchAllData()
+                                } else {
+                                  toast.error(data.error || 'Erreur')
+                                }
+                              } catch (error) {
+                                console.error('Error:', error)
                               }
-                            } catch (error) {
-                              console.error('Error:', error)
-                            }
+                            })
+                            setDeleteDialogOpen(true)
                           }}
                         >
                           <X className="h-4 w-4 mr-1" />
@@ -1997,6 +2014,20 @@ function TaxDashboardContent() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirmer la suppression</AlertDialogTitle>
+            <AlertDialogDescription>{deleteDialogMessage}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Annuler</AlertDialogCancel>
+            <AlertDialogAction onClick={() => { deleteDialogCallback?.(); setDeleteDialogOpen(false); }} className="bg-red-600 hover:bg-red-700">Supprimer</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Receipt View Modal */}
       {showReceiptModal && (

@@ -14,6 +14,7 @@ import {
   FileText, Download, Loader2, Calculator, Building2, TrendingUp, TrendingDown, Euro,
   AlertCircle, CheckCircle, Info, Calendar, Upload, Paperclip, X, Eye
 } from 'lucide-react'
+import { toast } from 'sonner'
 
 interface Settings {
   companyName: string
@@ -252,14 +253,14 @@ export function DeclarationsSection({ settings }: DeclarationsSectionProps) {
       }
 
       if (created > 0) {
-        alert(`${created} acompte(s) IS créé(s) pour l'exercice ${year} (${formatCurrency(acompteAmount)} par acompte)`)
+        toast.success(`${created} acompte(s) IS créé(s) pour l'exercice ${year} (${formatCurrency(acompteAmount)} par acompte)`)
         fetchDeclarations()
       } else {
-        alert(`Erreur: ${lastError}\n\nVérifiez que la base de données est synchronisée (relancez un déploiement Vercel si nécessaire).`)
+        toast.error(`Erreur: ${lastError}\n\nVérifiez que la base de données est synchronisée (relancez un déploiement Vercel si nécessaire).`)
       }
     } catch (error) {
       console.error('Error generating IS declaration:', error)
-      alert('Erreur lors de la génération')
+      toast.error('Erreur lors de la génération')
     }
   }
 
@@ -278,16 +279,16 @@ export function DeclarationsSection({ settings }: DeclarationsSectionProps) {
       })
       const data = await res.json()
       if (data.success) {
-        alert(`Déclaration TVA CA12 générée pour l'exercice ${year}`)
+        toast.success(`Déclaration TVA CA12 générée pour l'exercice ${year}`)
         fetchDeclarations()
       } else {
         const errorMsg = data.error || 'Erreur inconnue'
         const details = data.details ? `\n\nDétails: ${data.details}` : ''
-        alert(`Erreur: ${errorMsg}${details}\n\nSi le problème persiste, relancez un déploiement sur Vercel.`)
+        toast.error(`Erreur: ${errorMsg}${details}\n\nSi le problème persiste, relancez un déploiement sur Vercel.`)
       }
     } catch (error) {
       console.error('Error generating TVA declaration:', error)
-      alert('Erreur réseau - impossible de contacter le serveur')
+      toast.error('Erreur réseau - impossible de contacter le serveur')
     }
   }
 
@@ -322,11 +323,11 @@ export function DeclarationsSection({ settings }: DeclarationsSectionProps) {
       if (data.success) {
         fetchDeclarations()
       } else {
-        alert('Erreur: ' + (data.error || 'Erreur inconnue'))
+        toast.error('Erreur: ' + (data.error || 'Erreur inconnue'))
       }
     } catch (error) {
       console.error('Error uploading document:', error)
-      alert('Erreur lors du téléchargement')
+      toast.error('Erreur lors du téléchargement')
     } finally {
       setUploadingDoc(null)
     }

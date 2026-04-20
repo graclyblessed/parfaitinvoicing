@@ -16,6 +16,7 @@ import {
   AlertCircle, CheckCircle, Info, Copy, Check, Clipboard,
   ExternalLink, Save, HelpCircle, Percent
 } from 'lucide-react'
+import { toast } from 'sonner'
 
 interface Settings {
   companyName: string
@@ -146,13 +147,13 @@ export function FormulaireTVASection({ settings }: FormulaireTVASectionProps) {
         }
         
         msg += `\nTVA nette due: ${(s.tvaNette || 0).toFixed(2)}€`
-        alert(msg)
+        toast.success(msg)
       } else {
-        alert('Erreur: ' + (data.error || 'Erreur inconnue'))
+        toast.error('Erreur: ' + (data.error || 'Erreur inconnue'))
       }
     } catch (error) {
       console.error('Error generating 3517-S:', error)
-      alert('Erreur lors de la génération')
+      toast.error('Erreur lors de la génération')
     } finally {
       setGenerating(false)
     }
@@ -170,7 +171,7 @@ export function FormulaireTVASection({ settings }: FormulaireTVASectionProps) {
       const data = await res.json()
       if (data.success) {
         setForm(data.formulaire)
-        alert('Formulaire 3517-S mis à jour!')
+        toast.success('Formulaire 3517-S mis à jour!')
       }
     } catch (error) {
       console.error('Error saving 3517-S:', error)

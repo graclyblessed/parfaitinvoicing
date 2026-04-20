@@ -13,6 +13,7 @@ import {
   FileText, Download, Loader2, Calculator, Building2, TrendingUp, TrendingDown, Euro,
   AlertCircle, CheckCircle, Info
 } from 'lucide-react'
+import { toast } from 'sonner'
 
 interface LiasseData {
   id: string
@@ -123,7 +124,7 @@ export function LiasseFiscaleSection({ settings, transactions }: LiasseFiscaleSe
         fetchLiasses()
         
         const summary = data.summary
-        alert(`✅ Liasse fiscale ${year} générée!
+        toast.success(`✅ Liasse fiscale ${year} générée!
 
 📊 Résumé:
 • Chiffre d'affaires: ${formatCurrency(summary.chiffreAffaires)}
@@ -133,11 +134,11 @@ export function LiasseFiscaleSection({ settings, transactions }: LiasseFiscaleSe
 
 ${summary.nonDeductible > 0 ? `⚠️ Dépenses non déductibles: ${formatCurrency(summary.nonDeductible)}` : ''}`)
       } else {
-        alert('Erreur: ' + (data.error || 'Erreur inconnue'))
+        toast.error('Erreur: ' + (data.error || 'Erreur inconnue'))
       }
     } catch (error) {
       console.error('Error generating liasse:', error)
-      alert('Erreur lors de la génération')
+      toast.error('Erreur lors de la génération')
     } finally {
       setGenerating(false)
     }

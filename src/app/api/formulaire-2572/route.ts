@@ -46,7 +46,7 @@ export async function POST(request: NextRequest) {
     console.log(`Generating Formulaire 2572 for fiscal year ${targetYear}`)
     console.log(`Date range: ${startDate.toISOString()} to ${endDate.toISOString()}`)
 
-    // Fetch labeled transactions for the fiscal year
+    // Fetch labeled transactions for the fiscal year (with category for TVA rate and deductibility)
     const transactions = await db.transaction.findMany({
       where: {
         date: {
@@ -54,26 +54,30 @@ export async function POST(request: NextRequest) {
           lte: endDate
         },
         labeled: true
-      }
+      },
+      include: { category: true }
     })
 
     console.log(`Found ${transactions.length} labeled transactions`)
 
-    // Calculate total income and expenses
-    let totalIncome = 0
-    let totalExpenses = 0
+    // Compute result on HT basis (transactions are TTC). Non-deductible expenses (dividendes,
+    // retraits, etc.) are excluded from charges — they don't reduce the IS base.
+    let totalIncomeHT = 0
+    let totalDeductibleExpensesHT = 0
 
     for (const t of transactions) {
-      const amount = Math.abs(t.amount)
+      const amountTTC = Math.abs(t.amount)
+      const rate = t.category?.defaultTvaRate ?? 0.20
+      const amountHT = amountTTC / (1 + rate)
+
       if (t.type === 'income') {
-        totalIncome += amount
-      } else if (t.type === 'expense') {
-        totalExpenses += amount
+        totalIncomeHT += amountHT
+      } else if (t.type === 'expense' && t.category?.taxDeductible) {
+        totalDeductibleExpensesHT += amountHT
       }
     }
 
-    // Result = income - expenses
-    const result = totalIncome - totalExpenses
+    const result = totalIncomeHT - totalDeductibleExpensesHT
 
     // Fetch the existing liasse for this year to get calculated IS values
     const liasse = await db.liasseFiscale.findUnique({
@@ -295,8 +299,8 @@ export async function POST(request: NextRequest) {
       formulaire,
       summary: {
         transactions: transactions.length,
-        totalIncome,
-        totalExpenses,
+        totalIncomeHT,
+        totalDeductibleExpensesHT,
         result: usedResult,
         totalISBrut,
         totalCreditsImpot,

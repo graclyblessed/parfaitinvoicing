@@ -51,7 +51,7 @@ export async function POST(request: NextRequest) {
     console.log(`Generating Formulaire 2065 for fiscal year ${targetYear}`)
     console.log(`Date range: ${startDate.toISOString()} to ${endDate.toISOString()}`)
 
-    // Fetch labeled transactions for the fiscal year
+    // Fetch labeled transactions for the fiscal year (with category for TVA rate and deductibility)
     const transactions = await db.transaction.findMany({
       where: {
         date: {
@@ -59,26 +59,36 @@ export async function POST(request: NextRequest) {
           lte: endDate
         },
         labeled: true
-      }
+      },
+      include: { category: true }
     })
 
     console.log(`Found ${transactions.length} labeled transactions`)
 
-    // Calculate total income and expenses
-    let totalIncome = 0
-    let totalExpenses = 0
+    // Compute result on HT basis: transactions are stored TTC, so convert with category TVA rate.
+    // Non-deductible expense categories (dividendes, retraits, etc.) are excluded from charges.
+    let totalIncomeHT = 0
+    let totalDeductibleExpensesHT = 0
+    let totalNonDeductibleExpensesHT = 0
 
     for (const t of transactions) {
-      const amount = Math.abs(t.amount)
+      const amountTTC = Math.abs(t.amount)
+      const rate = t.category?.defaultTvaRate ?? 0.20
+      const amountHT = amountTTC / (1 + rate)
+
       if (t.type === 'income') {
-        totalIncome += amount
+        totalIncomeHT += amountHT
       } else if (t.type === 'expense') {
-        totalExpenses += amount
+        if (t.category?.taxDeductible) {
+          totalDeductibleExpensesHT += amountHT
+        } else {
+          totalNonDeductibleExpensesHT += amountHT
+        }
       }
     }
 
-    // Resultat comptable = income - expenses (same as liasse.resultatCourant)
-    const calculatedResult = totalIncome - totalExpenses
+    // Resultat comptable = revenues HT - deductible expenses HT
+    const calculatedResult = totalIncomeHT - totalDeductibleExpensesHT
 
     // Fetch the existing liasse for this year
     const liasse = await db.liasseFiscale.findUnique({
@@ -291,8 +301,9 @@ export async function POST(request: NextRequest) {
       formulaire,
       summary: {
         transactions: transactions.length,
-        totalIncome,
-        totalExpenses,
+        totalIncomeHT,
+        totalDeductibleExpensesHT,
+        totalNonDeductibleExpensesHT,
         resultatComptable,
         resultatFiscal,
         totalDeficits,

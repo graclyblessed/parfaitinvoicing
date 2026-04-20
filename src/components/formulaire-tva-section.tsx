@@ -11,10 +11,11 @@ import { Separator } from '@/components/ui/separator'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import {
   FileText, Download, Loader2, Calculator, Building2, Euro,
   AlertCircle, CheckCircle, Info, Copy, Check, Clipboard,
-  ExternalLink, Save, HelpCircle, Percent
+  ExternalLink, Save, HelpCircle, Percent, ChevronDown
 } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -82,6 +83,7 @@ export function FormulaireTVASection({ settings }: FormulaireTVASectionProps) {
   const [activeTab, setActiveTab] = useState('formulaire')
   const [copiedField, setCopiedField] = useState<string | null>(null)
   const [copiedAll, setCopiedAll] = useState(false)
+  const [nicheOpen, setNicheOpen] = useState(false)
 
   const [form, setForm] = useState<Formulaire3517S | null>(null)
   const [formList, setFormList] = useState<Formulaire3517S[]>([])
@@ -303,10 +305,61 @@ export function FormulaireTVASection({ settings }: FormulaireTVASectionProps) {
       <span className={`text-xs font-semibold px-2 py-0.5 rounded ${
         badgeColor === 'green' ? 'bg-green-100 text-green-800' :
         badgeColor === 'blue' ? 'bg-blue-100 text-blue-800' :
+        badgeColor === 'red' ? 'bg-red-100 text-red-800' :
         'bg-gray-100 text-gray-500'
       }`}>{badge}</span>
     </div>
   )
+
+  const renderGuideDoubleField = (label: string, baseHT: number, taxeDue: number, baseKey: string, taxeKey: string) => {
+    const rBase = Math.round(baseHT)
+    const rTaxe = Math.round(taxeDue)
+    return (
+      <div className="flex items-start py-2 border-b border-gray-100 last:border-0">
+        <span className="text-sm text-gray-600 leading-5 min-w-0 pr-3 flex-1">{label}</span>
+        <div className="flex items-center gap-3 flex-shrink-0">
+          {/* Base HT column */}
+          <div className="flex items-center gap-1 w-24 justify-end">
+            {rBase === 0 ? (
+              <span className="text-xs text-gray-400 font-mono">0</span>
+            ) : (
+              <>
+                <span className="font-mono text-sm font-semibold bg-blue-50 text-blue-800 px-1.5 py-0.5 rounded">
+                  {rBase.toLocaleString('fr-FR')}
+                </span>
+                <button
+                  onClick={() => copyTextToClipboard(rBase.toString(), baseKey)}
+                  className="inline-flex items-center justify-center h-6 w-6 rounded hover:bg-muted transition-colors"
+                  title="Copier"
+                >
+                  {copiedField === baseKey ? <Check className="h-3 w-3 text-green-600" /> : <Copy className="h-3 w-3 text-muted-foreground" />}
+                </button>
+              </>
+            )}
+          </div>
+          {/* Taxe due column */}
+          <div className="flex items-center gap-1 w-24 justify-end">
+            {rTaxe === 0 ? (
+              <span className="text-xs text-gray-400 font-mono">0</span>
+            ) : (
+              <>
+                <span className="font-mono text-sm font-semibold bg-blue-50 text-blue-800 px-1.5 py-0.5 rounded">
+                  {rTaxe.toLocaleString('fr-FR')}
+                </span>
+                <button
+                  onClick={() => copyTextToClipboard(rTaxe.toString(), taxeKey)}
+                  className="inline-flex items-center justify-center h-6 w-6 rounded hover:bg-muted transition-colors"
+                  title="Copier"
+                >
+                  {copiedField === taxeKey ? <Check className="h-3 w-3 text-green-600" /> : <Copy className="h-3 w-3 text-muted-foreground" />}
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6">
@@ -802,7 +855,7 @@ export function FormulaireTVASection({ settings }: FormulaireTVASectionProps) {
         </TabsContent>
 
         {/* ============================================ */}
-        {/* GUIDE SAISIE 3517-S */}
+        {/* GUIDE SAISIE 3517-S — impots.gouv.fr layout */}
         {/* ============================================ */}
         <TabsContent value="guide3517" className="space-y-6">
           <Alert>
@@ -814,7 +867,7 @@ export function FormulaireTVASection({ settings }: FormulaireTVASectionProps) {
               </a>{' '}
               et copiez chaque valeur ci-dessous dans le champ correspondant.
               Les valeurs en{' '}
-              <span className="bg-blue-50 text-blue-800 px-1 rounded font-mono text-xs">bleu</span> sont des montants en euros entiers.
+              <span className="bg-blue-50 text-blue-800 px-1 rounded font-mono text-xs">bleu</span> sont des montants en euros entiers (arrondis).
             </AlertDescription>
           </Alert>
 
@@ -830,222 +883,381 @@ export function FormulaireTVASection({ settings }: FormulaireTVASectionProps) {
             </Card>
           ) : (
             <>
-              {/* PAGE 1 — Néant */}
+              {/* ===================== PAGE 1 — Header ===================== */}
               <Card>
                 <CardHeader className="pb-2">
-                  <CardTitle className="text-base">Page 1 — Néant</CardTitle>
+                  <CardTitle className="text-base">Page 1 — En-tête / Déclaration néant</CardTitle>
                 </CardHeader>
-                <CardContent className="space-y-0">
+                <CardContent>
                   {renderGuideLabel(
-                    'Si vous n\'avez à remplir aucune case de ce formulaire (déclaration « néant »), veuillez cocher la case',
+                    'Si aucune case à remplir, cocher la case « Déclaration néant »',
                     'Non coché',
                     'gray'
                   )}
                 </CardContent>
               </Card>
 
-              {/* PAGE 2 — Opérations non taxées */}
+              {/* ===================== PAGE 2 — Opérations non taxées ===================== */}
               <Card>
                 <CardHeader className="pb-2">
                   <CardTitle className="text-base flex items-center gap-2">
                     <span className="bg-amber-100 text-amber-800 rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold">I</span>
-                    TVA BRUTE — Opérations non taxées (Pages 2-3)
+                    TVA BRUTE — Opérations non taxées (Page 2)
                   </CardTitle>
+                  <CardDescription className="text-xs">Montants HT des opérations exonérées ou non imposables</CardDescription>
                 </CardHeader>
-                <CardContent className="space-y-0">
-                  {renderGuideAmountField('Ligne 01 — Achats en franchise', 0, 'g_3517_01')}
+                <CardContent>
+                  {renderGuideAmountField('Ligne 01 — Achats en franchise de TVA / exportations', 0, 'g_3517_01')}
                   {renderGuideAmountField('Ligne 02 — Exportations hors UE', 0, 'g_3517_02')}
                   {renderGuideAmountField('Ligne 03 — Autres opérations non imposables', 0, 'g_3517_03')}
-                  {renderGuideAmountField('Ligne 3A — Ventes à distance (autre Etat membre)', 0, 'g_3517_3a')}
-                  {renderGuideAmountField('Ligne 04 — Livraisons intracommunautaires', 0, 'g_3517_04')}
+                  {renderGuideAmountField('Ligne 3A — Ventes à distance taxables dans un autre État membre', 0, 'g_3517_3a')}
+                  {renderGuideAmountField('Ligne 3B — Mises à la consommation de produits pétroliers', 0, 'g_3517_3b')}
+                  {renderGuideAmountField('Ligne 04 — Livraisons intracommunautaires à destination d\'une personne assujettie', 0, 'g_3517_04')}
+                  {renderGuideAmountField('Ligne 4B — Ventes par assujetti non établi en France', 0, 'g_3517_4b')}
                   {renderGuideLabel('Taxe sur les vidéogrammes, TLV, CO2, etc.', 'Non coché', 'gray')}
                 </CardContent>
               </Card>
 
-              {/* PAGE 3 — Opérations taxées */}
+              {/* ===================== PAGE 3 — Opérations taxées (France Métropolitaine) ===================== */}
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <span className="bg-amber-100 text-amber-800 rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold">I</span>
+                    TVA BRUTE — Opérations taxées, France Métropolitaine (Page 3)
+                  </CardTitle>
+                  <CardDescription className="text-xs">Base HT et taxe due par taux d&apos;imposition</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {/* Column headers */}
+                  <div className="flex items-center pb-2 border-b border-gray-200 text-xs font-semibold text-gray-500 uppercase">
+                    <span className="flex-1">Opération</span>
+                    <div className="flex gap-3 flex-shrink-0">
+                      <span className="w-24 text-right">Base HT</span>
+                      <span className="w-24 text-right">Taxe due</span>
+                    </div>
+                  </div>
+                  {/* Taux 20% */}
+                  {renderGuideDoubleField('Ligne 5A — Taux normal 20%', form.baseHT20, form.tvaCollectee20, 'g_3517_5a_base', 'g_3517_5a_tva')}
+                  {renderGuideDoubleField('Ligne 5B — Taux normal 20% produits pétroliers', 0, 0, 'g_3517_5b_base', 'g_3517_5b_tva')}
+                  {/* Taux 5.5% */}
+                  {renderGuideDoubleField('Ligne 06 — Taux réduit 5,5%', form.baseHT55, form.tvaCollectee55, 'g_3517_06_base', 'g_3517_06_tva')}
+                  {/* Taux 10% */}
+                  {renderGuideDoubleField('Ligne 6C — Taux réduit 10%', form.baseHT10, form.tvaCollectee10, 'g_3517_6c_base', 'g_3517_6c_tva')}
+                </CardContent>
+              </Card>
+
+              {/* ===================== PAGE 3 — DOM + Autres opérations ===================== */}
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base">TVA BRUTE — DOM, taux particuliers, autres opérations (Page 3)</CardTitle>
+                  <CardDescription className="text-xs">Pour une SASU classique métropolitaine, toutes ces lignes sont à 0</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex items-center pb-2 border-b border-gray-200 text-xs font-semibold text-gray-500 uppercase">
+                    <span className="flex-1">Opération</span>
+                    <div className="flex gap-3 flex-shrink-0">
+                      <span className="w-24 text-right">Base HT</span>
+                      <span className="w-24 text-right">Taxe due</span>
+                    </div>
+                  </div>
+                  {renderGuideDoubleField('Ligne 07 — DOM Taux normal 8,5%', 0, 0, 'g_3517_07_base', 'g_3517_07_tva')}
+                  {renderGuideDoubleField('Ligne 08 — DOM Taux réduit 2,1%', form.baseHT21, form.tvaCollectee21, 'g_3517_08_base', 'g_3517_08_tva')}
+                  {renderGuideDoubleField('Ligne 09 — Opérations imposables à un taux particulier', 0, 0, 'g_3517_09_base', 'g_3517_09_tva')}
+                  {renderGuideDoubleField('Ligne 9A — Taux réduit 13% produits pétroliers', 0, 0, 'g_3517_9a_base', 'g_3517_9a_tva')}
+                  {renderGuideDoubleField('Ligne 10 — Anciens taux', 0, 0, 'g_3517_10_base', 'g_3517_10_tva')}
+                  {renderGuideDoubleField('Ligne AA — Achats d\'électricité, gaz, chaleur, froid imposables', 0, 0, 'g_3517_aa_base', 'g_3517_aa_tva')}
+                  {renderGuideDoubleField('Ligne AB — Achats auprès d\'assujetti non établi (art 283-1)', 0, 0, 'g_3517_ab_base', 'g_3517_ab_tva')}
+                  {renderGuideDoubleField('Ligne AC — Achats de prestations auprès d\'assujetti non établi (art 283-2)', 0, 0, 'g_3517_ac_base', 'g_3517_ac_tva')}
+                  <Separator />
+                  {renderGuideDoubleField('Ligne 11 — Cessions d\'immobilisations', 0, 0, 'g_3517_11_base', 'g_3517_11_tva')}
+                  {renderGuideDoubleField('Ligne 12 — Livraisons à soi-même', 0, 0, 'g_3517_12_base', 'g_3517_12_tva')}
+                  {renderGuideDoubleField('Ligne 13 — Autres opérations imposables', 0, 0, 'g_3517_13_base', 'g_3517_13_tva')}
+                  <Separator />
+                  {/* Ligne 16 — TOTAL (taxe due column only) */}
+                  <div className="flex items-start py-3 bg-muted/50 rounded px-2 -mx-2 border border-amber-200">
+                    <span className="text-sm font-bold text-gray-800 leading-5 pr-3 flex-1">Ligne 16 — TOTAL DE LA TAXE DUE (lignes 5A à 13)</span>
+                    <div className="flex items-center gap-3 flex-shrink-0">
+                      <div className="w-24 text-right">
+                        <span className="text-xs text-gray-400 font-mono">—</span>
+                      </div>
+                      <div className="flex items-center gap-1 w-24 justify-end">
+                        <span className="font-mono text-sm font-bold bg-amber-100 text-amber-900 px-2 py-0.5 rounded">
+                          {Math.round(form.totalTVABrute).toLocaleString('fr-FR')}
+                        </span>
+                        <button
+                          onClick={() => copyTextToClipboard(Math.round(form.totalTVABrute).toString(), 'g_3517_16')}
+                          className="inline-flex items-center justify-center h-6 w-6 rounded hover:bg-muted transition-colors"
+                          title="Copier"
+                        >
+                          {copiedField === 'g_3517_16' ? <Check className="h-3 w-3 text-green-600" /> : <Copy className="h-3 w-3 text-muted-foreground" />}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* ===================== PAGE 4 — Autre TVA due + TVA DÉDUCTIBLE ===================== */}
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <span className="bg-amber-100 text-amber-800 rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold">I</span>
+                    Autre TVA due + Total TVA brute due (Page 4)
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {renderGuideAmountField('Ligne 17 — Remboursements provisionnels', 0, 'g_3517_17')}
+                  {renderGuideAmountField('Ligne 18 — TVA antérieurement déduite à reverser', 0, 'g_3517_18')}
+                  {renderGuideAmountField('Ligne AD — Sommes à ajouter', 0, 'g_3517_ad')}
+                  <Separator />
+                  {/* Ligne 19 — TOTAL TVA BRUTE DUE */}
+                  <div className="flex items-start py-3 bg-muted/50 rounded px-2 -mx-2 border border-amber-200">
+                    <span className="text-sm font-bold text-gray-800 leading-5 flex-1">Ligne 19 — TOTAL TVA BRUTE DUE (lignes 16 + 17 + 18 + AD)</span>
+                    <div className="flex items-center gap-1 flex-shrink-0">
+                      <span className="font-mono text-sm font-bold bg-amber-100 text-amber-900 px-2 py-0.5 rounded">
+                        {Math.round(form.totalTVABrute).toLocaleString('fr-FR')}
+                      </span>
+                      <button
+                        onClick={() => copyTextToClipboard(Math.round(form.totalTVABrute).toString(), 'g_3517_19')}
+                        className="inline-flex items-center justify-center h-6 w-6 rounded hover:bg-muted transition-colors"
+                        title="Copier"
+                      >
+                        {copiedField === 'g_3517_19' ? <Check className="h-3 w-3 text-green-600" /> : <Copy className="h-3 w-3 text-muted-foreground" />}
+                      </button>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* ===================== PAGE 4 — TVA DÉDUCTIBLE ===================== */}
               <Card>
                 <CardHeader className="pb-2">
                   <CardTitle className="text-base flex items-center gap-2">
                     <span className="bg-amber-100 text-amber-800 rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold">II</span>
-                    TVA BRUTE — Opérations taxées (Page 3)
-                  </CardTitle>
-                  <CardDescription className="text-xs">France Métropolitaine — Base HT et TVA collectée par taux</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div>
-                    <p className="text-xs font-semibold uppercase text-gray-500 mb-2">Taux normal 20%</p>
-                    {renderGuideAmountField('Ligne 5A — Base HT (taux 20%)', form.baseHT20, 'g_3517_5a_base')}
-                    {renderGuideAmountField('Ligne 5A — TVA collectée (20%)', form.tvaCollectee20, 'g_3517_5a_tva')}
-                  </div>
-                  <Separator />
-                  <div>
-                    <p className="text-xs font-semibold uppercase text-gray-500 mb-2">Taux réduit 10%</p>
-                    {renderGuideAmountField('Ligne 6C — Base HT (taux 10%)', form.baseHT10, 'g_3517_6c_base')}
-                    {renderGuideAmountField('Ligne 6C — TVA collectée (10%)', form.tvaCollectee10, 'g_3517_6c_tva')}
-                  </div>
-                  <Separator />
-                  <div>
-                    <p className="text-xs font-semibold uppercase text-gray-500 mb-2">Taux réduit 5,5%</p>
-                    {renderGuideAmountField('Ligne 06 — Base HT (taux 5,5%)', form.baseHT55, 'g_3517_06_base')}
-                    {renderGuideAmountField('Ligne 06 — TVA collectée (5,5%)', form.tvaCollectee55, 'g_3517_06_tva')}
-                  </div>
-                  <Separator />
-                  <div>
-                    <p className="text-xs font-semibold uppercase text-gray-500 mb-2">Taux réduit 2,1% (DOM)</p>
-                    {renderGuideAmountField('Ligne 08 — Base HT (taux 2,1%)', form.baseHT21, 'g_3517_08_base')}
-                    {renderGuideAmountField('Ligne 08 — TVA collectée (2,1%)', form.tvaCollectee21, 'g_3517_08_tva')}
-                  </div>
-                  <Separator />
-                  <div>
-                    <p className="text-xs font-semibold uppercase text-gray-500 mb-2">Autres opérations</p>
-                    {renderGuideAmountField('Ligne 11 — Cessions d\'immobilisations', 0, 'g_3517_11')}
-                    {renderGuideAmountField('Ligne 12 — Livraisons à soi-même', 0, 'g_3517_12')}
-                    {renderGuideAmountField('Ligne 13 — Autres opérations imposables', 0, 'g_3517_13')}
-                  </div>
-                  <Separator />
-                  {renderGuideAmountField('Ligne 16 — TOTAL DE LA TAXE DUE (lignes 5A à 13)', form.totalTVABrute, 'g_3517_16')}
-                </CardContent>
-              </Card>
-
-              {/* PAGE 4 — TVA déductible */}
-              <Card>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <span className="bg-amber-100 text-amber-800 rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold">III</span>
                     TVA DÉDUCTIBLE (Page 4)
                   </CardTitle>
                 </CardHeader>
-                <CardContent className="space-y-4">
-                  <div>
-                    <p className="text-xs font-semibold uppercase text-gray-500 mb-2">Autres biens et services</p>
-                    {renderGuideAmountField('Ligne 20 — Déductions sur factures', form.tvaDeductibleBiensServices, 'g_3517_20')}
-                    {renderGuideAmountField('Ligne 21 — Déductions forfaitaires', 0, 'g_3517_21')}
+                <CardContent>
+                  <p className="text-xs font-semibold uppercase text-gray-500 mb-1">Déductions sur biens et services</p>
+                  {renderGuideAmountField('Ligne 20 — Déductions sur factures d\'achats', form.tvaDeductibleBiensServices, 'g_3517_20')}
+                  {renderGuideAmountField('Ligne 21 — Déductions forfaitaires', 0, 'g_3517_21')}
+                  {/* Ligne 22 — sous-total */}
+                  <div className="flex items-start py-2 border-b border-gray-100 gap-3">
+                    <span className="text-sm font-semibold text-gray-700 flex-1 leading-5">Ligne 22 — Total (lignes 20 + 21)</span>
+                    <div className="flex items-center gap-1 flex-shrink-0">
+                      <span className="font-mono text-sm font-semibold bg-blue-50 text-blue-800 px-2 py-0.5 rounded">
+                        {Math.round(form.tvaDeductibleBiensServices).toLocaleString('fr-FR')}
+                      </span>
+                      <button
+                        onClick={() => copyTextToClipboard(Math.round(form.tvaDeductibleBiensServices).toString(), 'g_3517_22')}
+                        className="inline-flex items-center justify-center h-6 w-6 rounded hover:bg-muted transition-colors"
+                        title="Copier"
+                      >
+                        {copiedField === 'g_3517_22' ? <Check className="h-3 w-3 text-green-600" /> : <Copy className="h-3 w-3 text-muted-foreground" />}
+                      </button>
+                    </div>
                   </div>
                   <Separator />
-                  <div>
-                    <p className="text-xs font-semibold uppercase text-gray-500 mb-2">Immobilisations</p>
-                    {renderGuideAmountField('Ligne 23 — TVA déductible sur immobilisations', form.tvaDeductibleImmobilisations, 'g_3517_23')}
-                  </div>
+                  <p className="text-xs font-semibold uppercase text-gray-500 mb-1">Immobilisations et autres déductions</p>
+                  {renderGuideAmountField('Ligne 23 — TVA déductible sur immobilisations', form.tvaDeductibleImmobilisations, 'g_3517_23')}
+                  {renderGuideAmountField('Ligne 24 — Crédit antérieur non imputé', 0, 'g_3517_24')}
+                  {renderGuideAmountField('Ligne 25 — Omissions ou compléments de déductions', 0, 'g_3517_25')}
+                  {renderGuideAmountField('Ligne 25A — Compte tenu du coefficient de déduction', 0, 'g_3517_25a')}
+                  {renderGuideAmountField('Ligne AE — Sommes à imputer', 0, 'g_3517_ae')}
                   <Separator />
-                  <div>
-                    <p className="text-xs font-semibold uppercase text-gray-500 mb-2">Autre TVA à déduire</p>
-                    {renderGuideAmountField('Ligne 24 — Crédit antérieur non imputé', 0, 'g_3517_24')}
-                    {renderGuideAmountField('Ligne 25 — Omissions ou compléments de déductions', 0, 'g_3517_25')}
+                  {/* Ligne 26 — TOTAL TVA DÉDUCTIBLE */}
+                  <div className="flex items-start py-3 bg-muted/50 rounded px-2 -mx-2 border border-emerald-200">
+                    <span className="text-sm font-bold text-gray-800 leading-5 flex-1">Ligne 26 — TOTAL TVA DÉDUCTIBLE</span>
+                    <div className="flex items-center gap-1 flex-shrink-0">
+                      <span className="font-mono text-sm font-bold bg-emerald-100 text-emerald-900 px-2 py-0.5 rounded">
+                        -{Math.round(form.totalDeductions).toLocaleString('fr-FR')}
+                      </span>
+                      <button
+                        onClick={() => copyTextToClipboard(Math.round(form.totalDeductions).toString(), 'g_3517_26')}
+                        className="inline-flex items-center justify-center h-6 w-6 rounded hover:bg-muted transition-colors"
+                        title="Copier"
+                      >
+                        {copiedField === 'g_3517_26' ? <Check className="h-3 w-3 text-green-600" /> : <Copy className="h-3 w-3 text-muted-foreground" />}
+                      </button>
+                    </div>
                   </div>
-                  <Separator />
-                  {renderGuideAmountField('Ligne 26 — TOTAL DE LA TVA DÉDUCTIBLE', form.totalDeductions, 'g_3517_26')}
                 </CardContent>
               </Card>
 
-              {/* PAGE 5 — TVA nette */}
+              {/* ===================== PAGE 5 — III. TVA NETTE ===================== */}
+              <Card className={form.tvaNetteDue > 0 ? 'border-red-200' : 'border-emerald-200'}>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <span className="bg-amber-100 text-amber-800 rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold">III</span>
+                    TVA NETTE — Résultat de la liquidation (Page 5)
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {form.tvaNette >= 0 ? (
+                    <>
+                      {renderGuideAmountField('Ligne 28 — TVA due (ligne 19 − ligne 26)', form.tvaNette, 'g_3517_28')}
+                      {renderGuideAmountField('Ligne 29 — ou Crédit (ligne 26 − ligne 19)', 0, 'g_3517_29')}
+                    </>
+                  ) : (
+                    <>
+                      {renderGuideAmountField('Ligne 28 — TVA due (ligne 19 − ligne 26)', 0, 'g_3517_28')}
+                      {renderGuideAmountField('Ligne 29 — ou Crédit (ligne 26 − ligne 19)', Math.abs(form.tvaNette), 'g_3517_29')}
+                    </>
+                  )}
+                  {renderGuideAmountField('Ligne 30 — Acomptes payés et/ou restant dus', 0, 'g_3517_30')}
+                  <Separator />
+                  {/* Solde */}
+                  {form.tvaNetteDue > 0 ? (
+                    <div className="flex items-start py-3 bg-red-50 rounded px-2 -mx-2 border border-red-200">
+                      <span className="text-sm font-bold text-red-800 leading-5 flex-1">Ligne 33 — SOLDE DÛ</span>
+                      <div className="flex items-center gap-1 flex-shrink-0">
+                        <span className="font-mono text-sm font-bold bg-red-100 text-red-800 px-2 py-0.5 rounded">
+                          {Math.round(form.tvaNetteDue).toLocaleString('fr-FR')}
+                        </span>
+                        <button
+                          onClick={() => copyTextToClipboard(Math.round(form.tvaNetteDue).toString(), 'g_3517_33')}
+                          className="inline-flex items-center justify-center h-6 w-6 rounded hover:bg-red-100 transition-colors"
+                          title="Copier"
+                        >
+                          {copiedField === 'g_3517_33' ? <Check className="h-3 w-3 text-green-600" /> : <Copy className="h-3 w-3 text-muted-foreground" />}
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex items-start py-3 bg-emerald-50 rounded px-2 -mx-2 border border-emerald-200">
+                      <span className="text-sm font-bold text-emerald-800 leading-5 flex-1">Ligne 34 — EXCÉDENT DE VERSEMENT</span>
+                      <div className="flex items-center gap-1 flex-shrink-0">
+                        <span className="font-mono text-sm font-bold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded">
+                          {Math.round(form.creditTVA).toLocaleString('fr-FR')}
+                        </span>
+                        <button
+                          onClick={() => copyTextToClipboard(Math.round(form.creditTVA).toString(), 'g_3517_34')}
+                          className="inline-flex items-center justify-center h-6 w-6 rounded hover:bg-emerald-100 transition-colors"
+                          title="Copier"
+                        >
+                          {copiedField === 'g_3517_34' ? <Check className="h-3 w-3 text-green-600" /> : <Copy className="h-3 w-3 text-muted-foreground" />}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                  {form.tvaNetteDue <= 0 && (
+                    renderGuideAmountField('Ligne 35 — Solde excédentaire', form.creditTVA > 0 ? form.creditTVA : 0, 'g_3517_35')
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* ===================== PAGE 5 — IV. Taxes assimilées ===================== */}
               <Card>
                 <CardHeader className="pb-2">
                   <CardTitle className="text-base flex items-center gap-2">
                     <span className="bg-amber-100 text-amber-800 rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold">IV</span>
-                    TVA NETTE — Résultat de la liquidation (Page 5)
+                    Taxes assimilées (Page 5)
                   </CardTitle>
                 </CardHeader>
-                <CardContent className="space-y-0">
-                  {form.tvaNette >= 0 ? (
-                    <>
-                      {renderGuideAmountField('Ligne 28 — TVA due (ligne 19 - ligne 26)', form.tvaNette, 'g_3517_28')}
-                      {renderGuideAmountField('Ligne 29 — Crédit', 0, 'g_3517_29')}
-                    </>
-                  ) : (
-                    <>
-                      {renderGuideAmountField('Ligne 28 — TVA due', 0, 'g_3517_28')}
-                      {renderGuideAmountField('Ligne 29 — Crédit (ligne 26 - ligne 19)', Math.abs(form.tvaNette), 'g_3517_29')}
-                    </>
-                  )}
-                </CardContent>
-              </Card>
-
-              {/* PAGE 5 — Acomptes */}
-              <Card>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-base">Imputations / Régularisations des acomptes (Page 5)</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-0">
-                  {renderGuideLabel('Acompte 1 (juillet) — cochez si déduit', 'Non coché', 'gray')}
-                  {renderGuideLabel('Acompte 2 (décembre) — cochez si déduit', 'Non coché', 'gray')}
-                  {renderGuideAmountField('Ligne 30 — Acomptes payés et/ou restant dus', 0, 'g_3517_30')}
-                </CardContent>
-              </Card>
-
-              {/* PAGE 5 — Résultat net */}
-              <Card>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-base">Résultat net (Page 5)</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-0">
-                  {form.tvaNetteDue > 0 ? (
-                    <>
-                      {renderGuideAmountField('Ligne 33 — SOLDE DÛ', form.tvaNetteDue, 'g_3517_33')}
-                      {renderGuideAmountField('Ligne 34 — Excédent de versement', 0, 'g_3517_34')}
-                    </>
-                  ) : (
-                    <>
-                      {renderGuideAmountField('Ligne 33 — Solde dû', 0, 'g_3517_33')}
-                      {renderGuideAmountField('Ligne 34 — EXCÉDENT DE VERSEMENT', Math.abs(form.creditTVA), 'g_3517_34')}
-                    </>
-                  )}
-                  {renderGuideAmountField('Ligne 35 — Solde excédentaire', form.creditTVA > 0 ? form.creditTVA : 0, 'g_3517_35')}
-                </CardContent>
-              </Card>
-
-              {/* PAGE 8 — Récapitulation */}
-              <Card>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <span className="bg-amber-100 text-amber-800 rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold">VI</span>
-                    RÉCAPITULATION — Crédit ou excédent (Page 8)
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-0">
-                  {renderGuideAmountField('Ligne 49 — Solde excédentaire (report ligne 35)', form.creditTVA > 0 ? form.creditTVA : 0, 'g_3517_49')}
-                  {renderGuideAmountField('Ligne 50 — Remboursement demandé (3517DDR)', 0, 'g_3517_50')}
-                  {renderGuideAmountField('Ligne 51 — Crédit à reporter (prochaine CA12)', 0, 'g_3517_51')}
-                  {renderGuideAmountField('Ligne 52 — Crédit imputé sur prochains acomptes', 0, 'g_3517_52')}
-                </CardContent>
-              </Card>
-
-              {/* PAGE 9 — Total à payer + Acomptes suivants */}
-              <Card>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-base">Total à payer & Acomptes suivants (Page 9)</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="space-y-0">
-                    {renderGuideAmountField('Ligne 54 — TVA nette due (ligne 33 - ligne X5)', form.tvaNetteDue, 'g_3517_54')}
-                    {renderGuideAmountField('Ligne 55 — Taxes assimilées (total lignes 36 à 94)', 0, 'g_3517_55')}
-                    {renderGuideAmountField('Ligne Z5 — Accise sur les énergies due', 0, 'g_3517_z5')}
-                    {renderGuideAmountField('Ligne 56 — TOTAL À PAYER (lignes 54 + 55 + Z5)', form.totalAPayer, 'g_3517_56')}
+                <CardContent>
+                  <div className="flex items-center pb-2 border-b border-gray-200 text-xs font-semibold text-gray-500 uppercase">
+                    <span className="flex-1">Taxe</span>
+                    <div className="flex gap-3 flex-shrink-0">
+                      <span className="w-24 text-right">Base</span>
+                      <span className="w-24 text-right">Taxe</span>
+                    </div>
                   </div>
-                  <Separator />
-                  <div>
-                    <p className="text-xs font-semibold uppercase text-gray-500 mb-2">Acomptes déduits (ligne 30)</p>
-                    {renderGuideLabel('Acompte juillet — année', '— À remplir', 'gray')}
-                    {renderGuideLabel('Acompte décembre — année', '— À remplir', 'gray')}
-                  </div>
-                  <Separator />
-                  {renderGuideAmountField('Ligne 57 — TVA : base de calcul des acomptes suivants', form.totalTVABrute, 'g_3517_57')}
+                  {renderGuideDoubleField('Ligne 36 — Taxe sur cession droits audiovisuels (5%)', 0, 0, 'g_3517_36_base', 'g_3517_36_tva')}
+                  {renderGuideAmountField('Ligne 37 — Taxe exploitants agricoles', 0, 'g_3517_37')}
                 </CardContent>
               </Card>
 
-              {/* PAGE 9 — Mention expresse */}
-              <Card>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-base">Mention expresse (Page 9)</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-0">
-                  {renderGuideLabel('Si vous portez une mention expresse, cochez la case', 'Non coché', 'gray')}
-                  {renderGuideLabel('Acompte congés payés', 'Non coché', 'gray')}
-                  {renderGuideLabel('TIC (Accise sur les énergies)', 'Non coché', 'gray')}
-                  {renderGuideLabel('Autres', 'Non coché', 'gray')}
-                </CardContent>
-              </Card>
+              {/* ===================== PAGES 6-10 — Taxes assimilées (suite) + Récapitulation ===================== */}
+              <Collapsible open={nicheOpen} onOpenChange={setNicheOpen}>
+                <Card>
+                  <CollapsibleTrigger asChild>
+                    <CardHeader className="pb-2 cursor-pointer hover:bg-muted/50 rounded-t-lg transition-colors">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <CardTitle className="text-base">Pages 6-10 — Taxes assimilées (suite) + Récapitulation</CardTitle>
+                          <CardDescription className="text-xs mt-1">
+                            Taxes spécifiques (SASU classique : toutes à 0) + solde à payer + acomptes
+                          </CardDescription>
+                        </div>
+                        <ChevronDown className={`h-5 w-5 text-muted-foreground transition-transform ${nicheOpen ? 'rotate-180' : ''}`} />
+                      </div>
+                    </CardHeader>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <CardContent className="pt-0 space-y-6">
+                      {/* Taxes assimilées (suite) */}
+                      <div>
+                        <p className="text-xs font-semibold uppercase text-gray-500 mb-2">Taxes assimilées (Pages 6-8)</p>
+                        {renderGuideAmountField('Ligne 44 — Taxe huissiers', 0, 'g_3517_44')}
+                        {renderGuideAmountField('Ligne 45 — Taxe employeurs main-d\'oeuvre étrangère', 0, 'g_3517_45')}
+                        {renderGuideAmountField('Ligne 46 — Taxe formation professionnelle automobile', 0, 'g_3517_46')}
+                        {renderGuideAmountField('Ligne 47 — Taxe dépenses publicité', 0, 'g_3517_47')}
+                        {renderGuideAmountField('Ligne 4F — Taxe spéciale sur certains véhicules', 0, 'g_3517_4f')}
+                        {renderGuideAmountField('Ligne 4K — Taxe sur les lustres métalliques', 0, 'g_3517_4k')}
+                        {renderGuideAmountField('Ligne 4L — Taxe sur les contributions additionsales', 0, 'g_3517_4l')}
+                        {renderGuideAmountField('Ligne 4M — Autres taxes', 0, 'g_3517_4m')}
+                        <Separator />
+                        <p className="text-xs font-semibold uppercase text-gray-500 mb-2">Contributions sur boissons</p>
+                        {renderGuideAmountField('Ligne 88 — Droit de circulation', 0, 'g_3517_88')}
+                        {renderGuideAmountField('Ligne 89 — Droit de consommation', 0, 'g_3517_89')}
+                        {renderGuideAmountField('Ligne 90 — Cotisation assimilée TVA', 0, 'g_3517_90')}
+                        <Separator />
+                        {renderGuideAmountField('Ligne 93 — TSN (Taxe spéciale sur les navires)', 0, 'g_3517_93')}
+                        {renderGuideAmountField('Ligne 94 — Taxe plateformes mise en relation', 0, 'g_3517_94')}
+                      </div>
 
-              {/* Récapitulatif TVA calculé */}
+                      {/* VI — Récapitulation */}
+                      <div>
+                        <p className="text-xs font-semibold uppercase text-gray-500 mb-2 flex items-center gap-2">
+                          <span className="bg-amber-100 text-amber-800 rounded-full w-5 h-5 flex items-center justify-center text-[10px] font-bold">VI</span>
+                          Récapitulation — Crédit ou excédent
+                        </p>
+                        {renderGuideAmountField('Ligne 49 — Solde excédentaire (report ligne 35)', form.creditTVA > 0 ? form.creditTVA : 0, 'g_3517_49')}
+                        {renderGuideAmountField('Ligne 50 — Remboursement demandé (formulaire 3517 DDR)', 0, 'g_3517_50')}
+                        {renderGuideAmountField('Ligne 51 — Crédit à reporter (prochaine CA12)', 0, 'g_3517_51')}
+                        {renderGuideAmountField('Ligne 52 — Crédit imputé sur prochains acomptes', 0, 'g_3517_52')}
+                      </div>
+
+                      <Separator />
+
+                      {/* SOLDE À PAYER */}
+                      <div>
+                        <p className="text-xs font-semibold uppercase text-gray-500 mb-2">Solde à payer</p>
+                        {renderGuideAmountField('Ligne 54 — TVA nette due (ligne 33 − ligne X5)', form.tvaNetteDue, 'g_3517_54')}
+                        {renderGuideAmountField('Ligne 55 — Taxes assimilées (total lignes 36 à 94)', 0, 'g_3517_55')}
+                        {/* Ligne 56 — TOTAL À PAYER */}
+                        <div className="flex items-start py-3 bg-muted/50 rounded px-2 -mx-2 border border-amber-200">
+                          <span className="text-sm font-bold text-gray-800 leading-5 flex-1">Ligne 56 — TOTAL À PAYER</span>
+                          <div className="flex items-center gap-1 flex-shrink-0">
+                            <span className="font-mono text-sm font-bold bg-amber-100 text-amber-900 px-2 py-0.5 rounded">
+                              {Math.round(form.totalAPayer).toLocaleString('fr-FR')}
+                            </span>
+                            <button
+                              onClick={() => copyTextToClipboard(Math.round(form.totalAPayer).toString(), 'g_3517_56')}
+                              className="inline-flex items-center justify-center h-6 w-6 rounded hover:bg-muted transition-colors"
+                              title="Copier"
+                            >
+                              {copiedField === 'g_3517_56' ? <Check className="h-3 w-3 text-green-600" /> : <Copy className="h-3 w-3 text-muted-foreground" />}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+
+                      <Separator />
+
+                      {/* Acomptes section */}
+                      <div>
+                        <p className="text-xs font-semibold uppercase text-gray-500 mb-2">Acomptes — Base de calcul pour l&apos;année suivante</p>
+                        {renderGuideAmountField('Ligne 57 — TVA : base de calcul des acomptes', form.totalTVABrute, 'g_3517_57')}
+                        {renderGuideLabel('Ligne 58 — 1er acompte (Juillet) — cochez si applicable', 'Non coché', 'gray')}
+                        {renderGuideLabel('Ligne 58 — 2e acompte (Décembre) — cochez si applicable', 'Non coché', 'gray')}
+                      </div>
+                    </CardContent>
+                  </CollapsibleContent>
+                </Card>
+              </Collapsible>
+
+              {/* ===================== Récapitulatif TVA calculé ===================== */}
               <Card className="border-amber-200 bg-amber-50">
                 <CardHeader className="pb-2">
                   <CardTitle className="text-sm text-amber-800">Récapitulatif TVA calculé</CardTitle>
@@ -1059,17 +1271,29 @@ export function FormulaireTVASection({ settings }: FormulaireTVASectionProps) {
                     <span className="font-mono font-bold text-amber-900">{Math.round(form.totalBaseHT).toLocaleString('fr-FR')} EUR</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-amber-700">Total TVA collectée</span>
+                    <span className="text-amber-700">Total TVA collectée (ligne 19)</span>
                     <span className="font-mono font-bold text-amber-900">{Math.round(form.totalTVABrute).toLocaleString('fr-FR')} EUR</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-amber-700">Total TVA déductible</span>
+                    <span className="text-amber-700">Total TVA déductible (ligne 26)</span>
                     <span className="font-mono text-amber-900">{Math.round(form.totalDeductions).toLocaleString('fr-FR')} EUR</span>
                   </div>
                   <div className="flex justify-between font-bold border-t border-amber-200 pt-1 mt-1">
-                    <span className="text-amber-900">TVA NETTE</span>
+                    <span className="text-amber-900">TVA nette (ligne 28)</span>
                     <span className="font-mono text-amber-900">{Math.round(form.tvaNette).toLocaleString('fr-FR')} EUR</span>
                   </div>
+                  {form.tvaNetteDue > 0 && (
+                    <div className="flex justify-between font-bold border-t border-amber-300 pt-1 mt-1">
+                      <span className="text-red-800">Solde à payer (ligne 56)</span>
+                      <span className="font-mono text-red-800">{Math.round(form.totalAPayer).toLocaleString('fr-FR')} EUR</span>
+                    </div>
+                  )}
+                  {form.creditTVA > 0 && (
+                    <div className="flex justify-between font-bold border-t border-amber-300 pt-1 mt-1">
+                      <span className="text-emerald-800">Crédit de TVA (ligne 34)</span>
+                      <span className="font-mono text-emerald-800">{Math.round(form.creditTVA).toLocaleString('fr-FR')} EUR</span>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             </>

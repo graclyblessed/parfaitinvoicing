@@ -23,7 +23,8 @@ export const metadata: Metadata = {
   keywords: ["SASU", "facturation", "comptabilité", "IS", "TVA", "France"],
   authors: [{ name: "Parfait Invoicing" }],
   icons: {
-    icon: "https://z-cdn.chatglm.cn/z-ai/static/logo.svg",
+    icon: "/favicon.ico",
+    apple: "/apple-icon.png",
   },
 };
 

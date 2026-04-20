@@ -451,6 +451,105 @@ export function FormulaireISSection({ settings, transactions }: FormulaireISSect
     }).format(amount) + ' EUR'
   }
 
+  const parseAddress = (address: string) => {
+    const parts = address.split(/[,\n]/).map(s => s.trim()).filter(Boolean)
+    let street = '', complement = '', postalCode = '', city = '', country = 'FRANCE'
+    for (let i = 0; i < parts.length; i++) {
+      const p = parts[i]
+      const postalMatch = p.match(/\b(\d{5})\b/)
+      if (postalMatch) {
+        postalCode = postalMatch[1]
+        city = p.replace(/\b\d{5}\b/, '').trim()
+      } else if (i === 0) {
+        street = p
+      } else if (!postalCode) {
+        complement = p
+      } else {
+        country = p.toUpperCase()
+      }
+    }
+    return { street, complement, postalCode, city, country: country || 'FRANCE' }
+  }
+
+  const copyTextToClipboard = async (value: string, fieldKey: string) => {
+    try {
+      await navigator.clipboard.writeText(value)
+      setCopiedField(fieldKey)
+      setTimeout(() => setCopiedField(null), 2000)
+    } catch {
+      const ta = document.createElement('textarea')
+      ta.value = value
+      document.body.appendChild(ta)
+      ta.select()
+      document.execCommand('copy')
+      document.body.removeChild(ta)
+      setCopiedField(fieldKey)
+      setTimeout(() => setCopiedField(null), 2000)
+    }
+  }
+
+  const renderGuideTextField = (label: string, value: string, fieldKey: string) => (
+    <div className="flex items-start py-2 border-b border-gray-100 last:border-0 gap-3">
+      <span className="text-sm text-gray-600 flex-1 leading-5">{label}</span>
+      <div className="flex items-center gap-1 flex-shrink-0">
+        {!value ? (
+          <span className="text-xs text-gray-400 italic">–</span>
+        ) : (
+          <>
+            <span className="font-mono text-sm font-semibold bg-amber-50 text-amber-900 px-2 py-0.5 rounded max-w-[240px] text-right">
+              {value}
+            </span>
+            <button
+              onClick={() => copyTextToClipboard(value, fieldKey)}
+              className="inline-flex items-center justify-center h-6 w-6 rounded hover:bg-muted transition-colors"
+              title="Copier"
+            >
+              {copiedField === fieldKey ? <Check className="h-3 w-3 text-green-600" /> : <Copy className="h-3 w-3 text-muted-foreground" />}
+            </button>
+          </>
+        )}
+      </div>
+    </div>
+  )
+
+  const renderGuideAmountField = (label: string, value: number, fieldKey: string) => {
+    const rounded = Math.round(value)
+    return (
+      <div className="flex items-start py-2 border-b border-gray-100 last:border-0 gap-3">
+        <span className="text-sm text-gray-600 flex-1 leading-5">{label}</span>
+        <div className="flex items-center gap-1 flex-shrink-0">
+          {rounded === 0 ? (
+            <span className="text-xs text-gray-400 font-mono px-2">0</span>
+          ) : (
+            <>
+              <span className="font-mono text-sm font-bold bg-blue-50 text-blue-800 px-2 py-0.5 rounded">
+                {rounded.toLocaleString('fr-FR')}
+              </span>
+              <button
+                onClick={() => copyTextToClipboard(rounded.toString(), fieldKey)}
+                className="inline-flex items-center justify-center h-6 w-6 rounded hover:bg-muted transition-colors"
+                title="Copier"
+              >
+                {copiedField === fieldKey ? <Check className="h-3 w-3 text-green-600" /> : <Copy className="h-3 w-3 text-muted-foreground" />}
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  const renderGuideLabel = (label: string, badge: string, badgeColor = 'gray') => (
+    <div className="flex items-center py-2 border-b border-gray-100 last:border-0 gap-3">
+      <span className="text-sm text-gray-600 flex-1 leading-5">{label}</span>
+      <span className={`text-xs font-semibold px-2 py-0.5 rounded ${
+        badgeColor === 'green' ? 'bg-green-100 text-green-800' :
+        badgeColor === 'blue' ? 'bg-blue-100 text-blue-800' :
+        'bg-gray-100 text-gray-500'
+      }`}>{badge}</span>
+    </div>
+  )
+
   const renderCopyBtn = (value: number, fieldLabel: string) => (
     <button
       onClick={() => copyToClipboard(value, fieldLabel)}
@@ -506,6 +605,7 @@ export function FormulaireISSection({ settings, transactions }: FormulaireISSect
         <TabsList className="mb-6">
           <TabsTrigger value="2572">Formulaire 2572</TabsTrigger>
           <TabsTrigger value="2065">Formulaire 2065</TabsTrigger>
+          <TabsTrigger value="guide2065">Guide saisie 2065</TabsTrigger>
           <TabsTrigger value="historique">Historique</TabsTrigger>
         </TabsList>
 
@@ -1326,6 +1426,298 @@ export function FormulaireISSection({ settings, transactions }: FormulaireISSect
               </CardContent>
             </Card>
           )}
+        </TabsContent>
+
+        {/* ============================================ */}
+        {/* GUIDE SAISIE 2065 - miroir impots.gouv.fr  */}
+        {/* ============================================ */}
+        <TabsContent value="guide2065" className="space-y-6">
+          <Alert>
+            <Info className="h-4 w-4" />
+            <AlertDescription>
+              <strong>Guide de saisie ligne par ligne.</strong> Ouvrez votre déclaration 2065 sur{' '}
+              <a href="https://cfspro.impots.gouv.fr" target="_blank" rel="noopener noreferrer" className="underline font-medium text-blue-600">
+                impots.gouv.fr
+              </a>{' '}
+              et copiez chaque valeur ci-dessous dans le champ correspondant. Les valeurs en{' '}
+              <span className="bg-amber-50 text-amber-900 px-1 rounded font-mono text-xs">amber</span> sont des textes,
+              les valeurs en{' '}
+              <span className="bg-blue-50 text-blue-800 px-1 rounded font-mono text-xs">bleu</span> sont des montants en euros entiers.
+            </AlertDescription>
+          </Alert>
+
+          {!form2065 || !settings ? (
+            <Card>
+              <CardContent className="py-12 text-center">
+                <FileText className="h-16 w-16 mx-auto mb-4 text-muted-foreground opacity-50" />
+                <p className="text-lg font-medium">Générez d&apos;abord le formulaire 2065</p>
+                <p className="text-muted-foreground mt-2 text-sm">
+                  Allez dans l&apos;onglet &quot;Formulaire 2065&quot;, renseignez les paramètres et cliquez sur Générer.
+                </p>
+              </CardContent>
+            </Card>
+          ) : (() => {
+            const addr = parseAddress(settings.companyAddress)
+            const isBenefice = form2065.resultatFiscal >= 0
+            const beneficeNormal = isBenefice ? form2065.baseImposable : 0
+            const deficit = isBenefice ? 0 : Math.abs(form2065.resultatFiscal)
+
+            return (
+              <>
+                {/* IDENTIFICATION DE LA SOCIÉTÉ */}
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <Building2 className="h-4 w-4 text-blue-600" />
+                      Identification de la société
+                    </CardTitle>
+                    <p className="text-xs text-muted-foreground">Haut du formulaire 2065 — coordonnées de votre société</p>
+                  </CardHeader>
+                  <CardContent className="space-y-0">
+                    {renderGuideTextField('Forme juridique', 'SASU', 'g_forme_jur')}
+                    {renderGuideTextField('N° d\'agrément', '', 'g_agrement')}
+                    {renderGuideTextField('Dénomination', settings.companyName, 'g_denomination')}
+                    {renderGuideTextField('Complément de désignation', '', 'g_complement_desig')}
+                    {renderGuideTextField('Numéro, type et nom de voie', addr.street, 'g_voie')}
+                    {renderGuideTextField('Complément de distribution', addr.complement, 'g_complement_distrib')}
+                    {renderGuideTextField('Lieu-dit, hameau', '', 'g_lieu_dit')}
+                    {renderGuideTextField('Code postal', addr.postalCode, 'g_cp')}
+                    {renderGuideTextField('Ville', addr.city, 'g_ville')}
+                    {renderGuideTextField('Pays', addr.country || 'FRANCE', 'g_pays')}
+                    <div className="pt-2 text-xs text-muted-foreground">
+                      <span className="font-medium">Adresse complète stockée :</span> {settings.companyAddress}
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* IDENTIFICATION DU REPRÉSENTANT */}
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <Building2 className="h-4 w-4 text-blue-600" />
+                      Identification du représentant (dirigeant)
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-0">
+                    {renderGuideTextField('Forme juridique ou titre', '', 'g_rep_forme')}
+                    {renderGuideTextField('Nom et prénom ou dénomination', settings.presidentName || '', 'g_rep_nom')}
+                    {renderGuideTextField('Qualité et fonction ou complément de dénomination', 'Président', 'g_rep_qualite')}
+                    {renderGuideTextField('Numéro, type et nom de voie', addr.street, 'g_rep_voie')}
+                    {renderGuideTextField('Complément de distribution', addr.complement, 'g_rep_complement')}
+                    {renderGuideTextField('Lieu-dit, hameau', '', 'g_rep_lieu_dit')}
+                    {renderGuideTextField('Code postal', addr.postalCode, 'g_rep_cp')}
+                    {renderGuideTextField('Ville', addr.city, 'g_rep_ville')}
+                  </CardContent>
+                </Card>
+
+                {/* QUESTIONS 3 & 4 */}
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-base">Questions d&apos;identification</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-0">
+                    {renderGuideLabel('3 - Avez-vous changé d\'adresse ? Si oui, indiquez l\'ancienne adresse', 'Non', 'gray')}
+                    {renderGuideLabel('4 - Relevez-vous du régime fiscal des groupes ?', 'Non', 'gray')}
+                  </CardContent>
+                </Card>
+
+                {/* B - ACTIVITÉS */}
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-base">B — Activités</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-0">
+                    {renderGuideLabel('Si vous avez changé d\'activité, cochez la case', 'Non coché', 'gray')}
+                    <div className="py-3 border-b border-gray-100">
+                      <p className="text-sm text-gray-600 mb-1">Activités exercées (2 lignes)</p>
+                      <div className="bg-yellow-50 border border-yellow-200 rounded p-3 text-sm text-yellow-800">
+                        ⚠️ À remplir manuellement selon votre activité réelle (ex : <em>Conseil et services en informatique</em>).
+                        Votre code APE / NAF peut vous aider.
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* C - RÉCAPITULATION */}
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-base">C — Récapitulation des éléments d&apos;imposition</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+
+                    {/* C1 - Résultat fiscal */}
+                    <div>
+                      <p className="text-xs font-semibold uppercase text-gray-500 mb-2 pt-1">1 — Résultat fiscal</p>
+                      {renderGuideAmountField('Bénéfice imposable au taux normal', beneficeNormal, 'g_c1_benefice_normal')}
+                      {renderGuideAmountField('Bénéfice imposable à 15%', 0, 'g_c1_benefice_15')}
+                      {renderGuideAmountField('Déficit (report du 2033-B)', deficit, 'g_c1_deficit')}
+                      {renderGuideAmountField('Résultat net de cession, concession ou sous-concession de brevets imposable au taux de 10%', 0, 'g_c1_brevets_10')}
+                    </div>
+
+                    <Separator />
+
+                    {/* C2 - Plus-values */}
+                    <div>
+                      <p className="text-xs font-semibold uppercase text-gray-500 mb-2">2 — Plus-values</p>
+                      {renderGuideAmountField('Plus-values à long terme imposables à 15%', 0, 'g_c2_pv_15')}
+                      {renderGuideAmountField('Plus-values à long terme imposables à 19%', 0, 'g_c2_pv_19')}
+                      {renderGuideAmountField('Autres plus-values imposables à 19%', 0, 'g_c2_pv_autres_19')}
+                      {renderGuideAmountField('Plus-values à long terme imposables à 0%', 0, 'g_c2_pv_0')}
+                      {renderGuideAmountField('Plus-values exonérées (art. 238 quindecies)', 0, 'g_c2_pv_exo')}
+                    </div>
+
+                    <Separator />
+
+                    {/* C3 - Abattements */}
+                    <div>
+                      <p className="text-xs font-semibold uppercase text-gray-500 mb-2">3 — Abattements sur le bénéfice et exonérations</p>
+                      <div className="grid grid-cols-1 gap-0">
+                        {renderGuideLabel('Entreprise nouvelle (art. 44 sexies)', 'Non coché', 'gray')}
+                        {renderGuideLabel('Jeune entreprise innovante (art. 44 sexies-0 A)', 'Non coché', 'gray')}
+                        {renderGuideLabel('Zone franche urbaine – Territoire entrepreneur (art. 44 octies A)', 'Non coché', 'gray')}
+                        {renderGuideLabel('Bassins urbains à dynamiser – BUD (art. 44 sexdecies)', 'Non coché', 'gray')}
+                        {renderGuideLabel('Zone de développement prioritaire (art. 44 septdecies)', 'Non coché', 'gray')}
+                        {renderGuideLabel('Zone de revitalisation rurale (art. 44 quindecies)', 'Non coché', 'gray')}
+                        {renderGuideLabel('Bassins d\'emploi à redynamiser (art. 44 duodecies)', 'Non coché', 'gray')}
+                        {renderGuideLabel('Société d\'investissement immobilier côtée', 'Non coché', 'gray')}
+                        {renderGuideLabel('France Ruralités Revitalisation FRR (art. 44 quindecies A)', 'Non coché', 'gray')}
+                        {renderGuideLabel('Zone franche d\'activité nouvelle génération (art. 44 quaterdecies)', 'Non coché', 'gray')}
+                        {renderGuideLabel('Zone de restructuration de la défense (art. 44 terdecies)', 'Non coché', 'gray')}
+                        {renderGuideLabel('Autres dispositifs', 'Non coché', 'gray')}
+                      </div>
+                      {renderGuideAmountField('Bénéfice ou déficit exonéré (indiquer – en cas de déficit)', 0, 'g_c3_exo_benefice')}
+                      {renderGuideAmountField('Plus-values exonérées relevant du taux de 15%', 0, 'g_c3_pv_exo_15')}
+                    </div>
+
+                    <Separator />
+
+                    {/* C4 - Outre-mer */}
+                    <div>
+                      <p className="text-xs font-semibold uppercase text-gray-500 mb-2">4 — Option pour le crédit d&apos;impôt outre-mer</p>
+                      {renderGuideLabel('Option crédit d\'impôt outre-mer secteur productif (art. 244 quater W)', 'Non coché', 'gray')}
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* D - IMPUTATIONS */}
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-base">D — Imputations</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-0">
+                    {renderGuideAmountField(
+                      'Au titre des revenus mobiliers de source française ou étrangère, ayant donné lieu à la délivrance d\'un certificat de crédits d\'impôt',
+                      form2065.precompteIS,
+                      'g_d_revenus_mobiliers'
+                    )}
+                    {renderGuideAmountField(
+                      'Au titre des revenus auxquels est attaché, en vertu d\'une convention fiscale, un crédit d\'impôt représentatif de l\'impôt étranger',
+                      0,
+                      'g_d_convention_fiscale'
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* E - REVENUS LOCATIFS */}
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-base">E — Contribution annuelle sur les revenus locatifs</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-0">
+                    {renderGuideAmountField('Recettes nettes soumises à la contribution de 2,5%', 0, 'g_e_locatifs')}
+                  </CardContent>
+                </Card>
+
+                {/* F - COMPTABILITÉ INFORMATISÉE */}
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-base">F — Comptabilité informatisée</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-0">
+                    {renderGuideLabel('L\'entreprise dispose-t-elle d\'une comptabilité informatisée ?', 'Oui', 'green')}
+                    {renderGuideTextField('Si oui, veuillez indiquer le logiciel utilisé', 'Parfait Invoicing', 'g_f_logiciel')}
+                  </CardContent>
+                </Card>
+
+                {/* AUTRES INFORMATIONS */}
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-base">Autres informations</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+
+                    {/* ECF */}
+                    <div>
+                      <p className="text-xs font-semibold uppercase text-gray-500 mb-2">1 — Examen de conformité fiscale (ECF)</p>
+                      {renderGuideLabel('Si la période déclarée a fait l\'objet d\'un examen de conformité fiscale (ECF), cochez la case', 'Non coché', 'gray')}
+                    </div>
+
+                    <Separator />
+
+                    {/* Comptable */}
+                    <div>
+                      <p className="text-xs font-semibold uppercase text-gray-500 mb-2">2 — Coordonnées du comptable</p>
+                      {renderGuideLabel('S\'agit-il d\'un comptable salarié (S) ou indépendant (I) ?', '— À remplir', 'gray')}
+                      <div className="bg-gray-50 rounded p-3 text-sm text-gray-500 italic mt-2">
+                        Remplissez les coordonnées de votre expert-comptable sur impots.gouv.fr si vous en avez un.
+                        Ces informations ne sont pas stockées dans cette application.
+                      </div>
+                    </div>
+
+                    <Separator />
+
+                    {/* Conseil */}
+                    <div>
+                      <p className="text-xs font-semibold uppercase text-gray-500 mb-2">3 — Coordonnées du conseil</p>
+                      {renderGuideLabel('S\'agit-il d\'un conseil salarié (S) ou indépendant (I) ?', '— À remplir', 'gray')}
+                      <div className="bg-gray-50 rounded p-3 text-sm text-gray-500 italic mt-2">
+                        Remplissez les coordonnées de votre conseiller fiscal sur impots.gouv.fr si applicable.
+                      </div>
+                    </div>
+
+                    <Separator />
+
+                    {/* CGA / OMGA */}
+                    <div>
+                      <p className="text-xs font-semibold uppercase text-gray-500 mb-2">4 — Coordonnées du CGA, de l&apos;OMGA ou du viseur conventionné</p>
+                      {renderGuideLabel('Visa CGA/OMGA', 'Non coché', 'gray')}
+                      {renderGuideLabel('Viseur conventionné', 'Non coché', 'gray')}
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Récapitulatif IS */}
+                <Card className="border-blue-200 bg-blue-50">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm text-blue-800">Récapitulatif IS calculé</CardTitle>
+                    <p className="text-xs text-blue-700">
+                      Ces valeurs ne sont pas dans le formulaire 2065 mais dans le 2572 (relevé de solde). Pour mémoire :
+                    </p>
+                  </CardHeader>
+                  <CardContent className="space-y-1 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-blue-700">Base imposable totale</span>
+                      <span className="font-mono font-bold text-blue-900">{Math.round(form2065.baseImposable).toLocaleString('fr-FR')} €</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-blue-700">IS taux réduit 15% (sur {Math.round(form2065.baseTauxReduit).toLocaleString('fr-FR')} €)</span>
+                      <span className="font-mono text-blue-900">{Math.round(form2065.isTauxReduit).toLocaleString('fr-FR')} €</span>
+                    </div>
+                    {form2065.isTauxNormal > 0 && (
+                      <div className="flex justify-between">
+                        <span className="text-blue-700">IS taux normal 25% (sur {Math.round(form2065.baseTauxNormal).toLocaleString('fr-FR')} €)</span>
+                        <span className="font-mono text-blue-900">{Math.round(form2065.isTauxNormal).toLocaleString('fr-FR')} €</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between font-bold border-t border-blue-200 pt-1 mt-1">
+                      <span className="text-blue-900">IS NET À PAYER</span>
+                      <span className="font-mono text-blue-900">{Math.round(form2065.isNet).toLocaleString('fr-FR')} €</span>
+                    </div>
+                  </CardContent>
+                </Card>
+              </>
+            )
+          })()}
         </TabsContent>
 
         {/* ============================================ */}

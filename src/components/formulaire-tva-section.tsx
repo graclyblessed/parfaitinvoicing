@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Separator } from '@/components/ui/separator'
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import {
   FileText, Download, Loader2, Calculator, Building2, Euro,
@@ -77,6 +78,7 @@ export function FormulaireTVASection({ settings }: FormulaireTVASectionProps) {
   const [loading, setLoading] = useState(false)
   const [generating, setGenerating] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [activeTab, setActiveTab] = useState('formulaire')
   const [copiedField, setCopiedField] = useState<string | null>(null)
   const [copiedAll, setCopiedAll] = useState(false)
 
@@ -249,6 +251,62 @@ export function FormulaireTVASection({ settings }: FormulaireTVASectionProps) {
     </button>
   )
 
+  // Guide helpers
+  const copyTextToClipboard = async (value: string, fieldKey: string) => {
+    try {
+      await navigator.clipboard.writeText(value)
+      setCopiedField(fieldKey)
+      setTimeout(() => setCopiedField(null), 2000)
+    } catch {
+      const ta = document.createElement('textarea')
+      ta.value = value
+      document.body.appendChild(ta)
+      ta.select()
+      document.execCommand('copy')
+      document.body.removeChild(ta)
+      setCopiedField(fieldKey)
+      setTimeout(() => setCopiedField(null), 2000)
+    }
+  }
+
+  const renderGuideAmountField = (label: string, value: number, fieldKey: string) => {
+    const rounded = Math.round(value)
+    return (
+      <div className="flex items-start py-2 border-b border-gray-100 last:border-0 gap-3">
+        <span className="text-sm text-gray-600 flex-1 leading-5">{label}</span>
+        <div className="flex items-center gap-1 flex-shrink-0">
+          {rounded === 0 ? (
+            <span className="text-xs text-gray-400 font-mono px-2">0</span>
+          ) : (
+            <>
+              <span className="font-mono text-sm font-bold bg-blue-50 text-blue-800 px-2 py-0.5 rounded">
+                {rounded.toLocaleString('fr-FR')}
+              </span>
+              <button
+                onClick={() => copyTextToClipboard(rounded.toString(), fieldKey)}
+                className="inline-flex items-center justify-center h-6 w-6 rounded hover:bg-muted transition-colors"
+                title="Copier"
+              >
+                {copiedField === fieldKey ? <Check className="h-3 w-3 text-green-600" /> : <Copy className="h-3 w-3 text-muted-foreground" />}
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  const renderGuideLabel = (label: string, badge: string, badgeColor = 'gray') => (
+    <div className="flex items-center py-2 border-b border-gray-100 last:border-0 gap-3">
+      <span className="text-sm text-gray-600 flex-1 leading-5">{label}</span>
+      <span className={`text-xs font-semibold px-2 py-0.5 rounded ${
+        badgeColor === 'green' ? 'bg-green-100 text-green-800' :
+        badgeColor === 'blue' ? 'bg-blue-100 text-blue-800' :
+        'bg-gray-100 text-gray-500'
+      }`}>{badge}</span>
+    </div>
+  )
+
   return (
     <div className="space-y-6">
       {/* Year Selector */}
@@ -290,6 +348,13 @@ export function FormulaireTVASection({ settings }: FormulaireTVASectionProps) {
         </AlertDescription>
       </Alert>
 
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <TabsList className="mb-6">
+          <TabsTrigger value="formulaire">Formulaire 3517-S</TabsTrigger>
+          <TabsTrigger value="guide3517">Guide saisie 3517-S</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="formulaire" className="space-y-6">
       {/* Generate Card */}
       <Card>
         <CardHeader>
@@ -733,6 +798,283 @@ export function FormulaireTVASection({ settings }: FormulaireTVASectionProps) {
           </CardContent>
         </Card>
       )}
+        </TabsContent>
+
+        {/* ============================================ */}
+        {/* GUIDE SAISIE 3517-S */}
+        {/* ============================================ */}
+        <TabsContent value="guide3517" className="space-y-6">
+          <Alert>
+            <Info className="h-4 w-4" />
+            <AlertDescription>
+              <strong>Guide de saisie ligne par ligne.</strong> Ouvrez votre déclaration 3517-S sur{' '}
+              <a href="https://cfspro.impots.gouv.fr" target="_blank" rel="noopener noreferrer" className="underline font-medium text-blue-600">
+                impots.gouv.fr
+              </a>{' '}
+              et copiez chaque valeur ci-dessous dans le champ correspondant.
+              Les valeurs en{' '}
+              <span className="bg-blue-50 text-blue-800 px-1 rounded font-mono text-xs">bleu</span> sont des montants en euros entiers.
+            </AlertDescription>
+          </Alert>
+
+          {!form ? (
+            <Card>
+              <CardContent className="py-12 text-center">
+                <FileText className="h-16 w-16 mx-auto mb-4 text-muted-foreground opacity-50" />
+                <p className="text-lg font-medium">Générez d&apos;abord le formulaire 3517-S</p>
+                <p className="text-muted-foreground mt-2 text-sm">
+                  Allez dans l&apos;onglet &quot;Formulaire 3517-S&quot;, cliquez sur Générer.
+                </p>
+              </CardContent>
+            </Card>
+          ) : (
+            <>
+              {/* PAGE 1 — Néant */}
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base">Page 1 — Néant</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-0">
+                  {renderGuideLabel(
+                    'Si vous n\'avez à remplir aucune case de ce formulaire (déclaration « néant »), veuillez cocher la case',
+                    'Non coché',
+                    'gray'
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* PAGE 2 — Opérations non taxées */}
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <span className="bg-amber-100 text-amber-800 rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold">I</span>
+                    TVA BRUTE — Opérations non taxées (Pages 2-3)
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-0">
+                  {renderGuideAmountField('Ligne 01 — Achats en franchise', 0, 'g_3517_01')}
+                  {renderGuideAmountField('Ligne 02 — Exportations hors UE', 0, 'g_3517_02')}
+                  {renderGuideAmountField('Ligne 03 — Autres opérations non imposables', 0, 'g_3517_03')}
+                  {renderGuideAmountField('Ligne 3A — Ventes à distance (autre Etat membre)', 0, 'g_3517_3a')}
+                  {renderGuideAmountField('Ligne 04 — Livraisons intracommunautaires', 0, 'g_3517_04')}
+                  {renderGuideLabel('Taxe sur les vidéogrammes, TLV, CO2, etc.', 'Non coché', 'gray')}
+                </CardContent>
+              </Card>
+
+              {/* PAGE 3 — Opérations taxées */}
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <span className="bg-amber-100 text-amber-800 rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold">II</span>
+                    TVA BRUTE — Opérations taxées (Page 3)
+                  </CardTitle>
+                  <CardDescription className="text-xs">France Métropolitaine — Base HT et TVA collectée par taux</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div>
+                    <p className="text-xs font-semibold uppercase text-gray-500 mb-2">Taux normal 20%</p>
+                    {renderGuideAmountField('Ligne 5A — Base HT (taux 20%)', form.baseHT20, 'g_3517_5a_base')}
+                    {renderGuideAmountField('Ligne 5A — TVA collectée (20%)', form.tvaCollectee20, 'g_3517_5a_tva')}
+                  </div>
+                  <Separator />
+                  <div>
+                    <p className="text-xs font-semibold uppercase text-gray-500 mb-2">Taux réduit 10%</p>
+                    {renderGuideAmountField('Ligne 6C — Base HT (taux 10%)', form.baseHT10, 'g_3517_6c_base')}
+                    {renderGuideAmountField('Ligne 6C — TVA collectée (10%)', form.tvaCollectee10, 'g_3517_6c_tva')}
+                  </div>
+                  <Separator />
+                  <div>
+                    <p className="text-xs font-semibold uppercase text-gray-500 mb-2">Taux réduit 5,5%</p>
+                    {renderGuideAmountField('Ligne 06 — Base HT (taux 5,5%)', form.baseHT55, 'g_3517_06_base')}
+                    {renderGuideAmountField('Ligne 06 — TVA collectée (5,5%)', form.tvaCollectee55, 'g_3517_06_tva')}
+                  </div>
+                  <Separator />
+                  <div>
+                    <p className="text-xs font-semibold uppercase text-gray-500 mb-2">Taux réduit 2,1% (DOM)</p>
+                    {renderGuideAmountField('Ligne 08 — Base HT (taux 2,1%)', form.baseHT21, 'g_3517_08_base')}
+                    {renderGuideAmountField('Ligne 08 — TVA collectée (2,1%)', form.tvaCollectee21, 'g_3517_08_tva')}
+                  </div>
+                  <Separator />
+                  <div>
+                    <p className="text-xs font-semibold uppercase text-gray-500 mb-2">Autres opérations</p>
+                    {renderGuideAmountField('Ligne 11 — Cessions d\'immobilisations', 0, 'g_3517_11')}
+                    {renderGuideAmountField('Ligne 12 — Livraisons à soi-même', 0, 'g_3517_12')}
+                    {renderGuideAmountField('Ligne 13 — Autres opérations imposables', 0, 'g_3517_13')}
+                  </div>
+                  <Separator />
+                  {renderGuideAmountField('Ligne 16 — TOTAL DE LA TAXE DUE (lignes 5A à 13)', form.totalTVABrute, 'g_3517_16')}
+                </CardContent>
+              </Card>
+
+              {/* PAGE 4 — TVA déductible */}
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <span className="bg-amber-100 text-amber-800 rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold">III</span>
+                    TVA DÉDUCTIBLE (Page 4)
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div>
+                    <p className="text-xs font-semibold uppercase text-gray-500 mb-2">Autres biens et services</p>
+                    {renderGuideAmountField('Ligne 20 — Déductions sur factures', form.tvaDeductibleBiensServices, 'g_3517_20')}
+                    {renderGuideAmountField('Ligne 21 — Déductions forfaitaires', 0, 'g_3517_21')}
+                  </div>
+                  <Separator />
+                  <div>
+                    <p className="text-xs font-semibold uppercase text-gray-500 mb-2">Immobilisations</p>
+                    {renderGuideAmountField('Ligne 23 — TVA déductible sur immobilisations', form.tvaDeductibleImmobilisations, 'g_3517_23')}
+                  </div>
+                  <Separator />
+                  <div>
+                    <p className="text-xs font-semibold uppercase text-gray-500 mb-2">Autre TVA à déduire</p>
+                    {renderGuideAmountField('Ligne 24 — Crédit antérieur non imputé', 0, 'g_3517_24')}
+                    {renderGuideAmountField('Ligne 25 — Omissions ou compléments de déductions', 0, 'g_3517_25')}
+                  </div>
+                  <Separator />
+                  {renderGuideAmountField('Ligne 26 — TOTAL DE LA TVA DÉDUCTIBLE', form.totalDeductions, 'g_3517_26')}
+                </CardContent>
+              </Card>
+
+              {/* PAGE 5 — TVA nette */}
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <span className="bg-amber-100 text-amber-800 rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold">IV</span>
+                    TVA NETTE — Résultat de la liquidation (Page 5)
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-0">
+                  {form.tvaNette >= 0 ? (
+                    <>
+                      {renderGuideAmountField('Ligne 28 — TVA due (ligne 19 - ligne 26)', form.tvaNette, 'g_3517_28')}
+                      {renderGuideAmountField('Ligne 29 — Crédit', 0, 'g_3517_29')}
+                    </>
+                  ) : (
+                    <>
+                      {renderGuideAmountField('Ligne 28 — TVA due', 0, 'g_3517_28')}
+                      {renderGuideAmountField('Ligne 29 — Crédit (ligne 26 - ligne 19)', Math.abs(form.tvaNette), 'g_3517_29')}
+                    </>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* PAGE 5 — Acomptes */}
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base">Imputations / Régularisations des acomptes (Page 5)</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-0">
+                  {renderGuideLabel('Acompte 1 (juillet) — cochez si déduit', 'Non coché', 'gray')}
+                  {renderGuideLabel('Acompte 2 (décembre) — cochez si déduit', 'Non coché', 'gray')}
+                  {renderGuideAmountField('Ligne 30 — Acomptes payés et/ou restant dus', 0, 'g_3517_30')}
+                </CardContent>
+              </Card>
+
+              {/* PAGE 5 — Résultat net */}
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base">Résultat net (Page 5)</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-0">
+                  {form.tvaNetteDue > 0 ? (
+                    <>
+                      {renderGuideAmountField('Ligne 33 — SOLDE DÛ', form.tvaNetteDue, 'g_3517_33')}
+                      {renderGuideAmountField('Ligne 34 — Excédent de versement', 0, 'g_3517_34')}
+                    </>
+                  ) : (
+                    <>
+                      {renderGuideAmountField('Ligne 33 — Solde dû', 0, 'g_3517_33')}
+                      {renderGuideAmountField('Ligne 34 — EXCÉDENT DE VERSEMENT', Math.abs(form.creditTVA), 'g_3517_34')}
+                    </>
+                  )}
+                  {renderGuideAmountField('Ligne 35 — Solde excédentaire', form.creditTVA > 0 ? form.creditTVA : 0, 'g_3517_35')}
+                </CardContent>
+              </Card>
+
+              {/* PAGE 8 — Récapitulation */}
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <span className="bg-amber-100 text-amber-800 rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold">VI</span>
+                    RÉCAPITULATION — Crédit ou excédent (Page 8)
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-0">
+                  {renderGuideAmountField('Ligne 49 — Solde excédentaire (report ligne 35)', form.creditTVA > 0 ? form.creditTVA : 0, 'g_3517_49')}
+                  {renderGuideAmountField('Ligne 50 — Remboursement demandé (3517DDR)', 0, 'g_3517_50')}
+                  {renderGuideAmountField('Ligne 51 — Crédit à reporter (prochaine CA12)', 0, 'g_3517_51')}
+                  {renderGuideAmountField('Ligne 52 — Crédit imputé sur prochains acomptes', 0, 'g_3517_52')}
+                </CardContent>
+              </Card>
+
+              {/* PAGE 9 — Total à payer + Acomptes suivants */}
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base">Total à payer & Acomptes suivants (Page 9)</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="space-y-0">
+                    {renderGuideAmountField('Ligne 54 — TVA nette due (ligne 33 - ligne X5)', form.tvaNetteDue, 'g_3517_54')}
+                    {renderGuideAmountField('Ligne 55 — Taxes assimilées (total lignes 36 à 94)', 0, 'g_3517_55')}
+                    {renderGuideAmountField('Ligne Z5 — Accise sur les énergies due', 0, 'g_3517_z5')}
+                    {renderGuideAmountField('Ligne 56 — TOTAL À PAYER (lignes 54 + 55 + Z5)', form.totalAPayer, 'g_3517_56')}
+                  </div>
+                  <Separator />
+                  <div>
+                    <p className="text-xs font-semibold uppercase text-gray-500 mb-2">Acomptes déduits (ligne 30)</p>
+                    {renderGuideLabel('Acompte juillet — année', '— À remplir', 'gray')}
+                    {renderGuideLabel('Acompte décembre — année', '— À remplir', 'gray')}
+                  </div>
+                  <Separator />
+                  {renderGuideAmountField('Ligne 57 — TVA : base de calcul des acomptes suivants', form.totalTVABrute, 'g_3517_57')}
+                </CardContent>
+              </Card>
+
+              {/* PAGE 9 — Mention expresse */}
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base">Mention expresse (Page 9)</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-0">
+                  {renderGuideLabel('Si vous portez une mention expresse, cochez la case', 'Non coché', 'gray')}
+                  {renderGuideLabel('Acompte congés payés', 'Non coché', 'gray')}
+                  {renderGuideLabel('TIC (Accise sur les énergies)', 'Non coché', 'gray')}
+                  {renderGuideLabel('Autres', 'Non coché', 'gray')}
+                </CardContent>
+              </Card>
+
+              {/* Récapitulatif TVA calculé */}
+              <Card className="border-amber-200 bg-amber-50">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm text-amber-800">Récapitulatif TVA calculé</CardTitle>
+                  <p className="text-xs text-amber-700">
+                    Résumé des valeurs calculées automatiquement à partir de vos données.
+                  </p>
+                </CardHeader>
+                <CardContent className="space-y-1 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-amber-700">Total base HT</span>
+                    <span className="font-mono font-bold text-amber-900">{Math.round(form.totalBaseHT).toLocaleString('fr-FR')} EUR</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-amber-700">Total TVA collectée</span>
+                    <span className="font-mono font-bold text-amber-900">{Math.round(form.totalTVABrute).toLocaleString('fr-FR')} EUR</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-amber-700">Total TVA déductible</span>
+                    <span className="font-mono text-amber-900">{Math.round(form.totalDeductions).toLocaleString('fr-FR')} EUR</span>
+                  </div>
+                  <div className="flex justify-between font-bold border-t border-amber-200 pt-1 mt-1">
+                    <span className="text-amber-900">TVA NETTE</span>
+                    <span className="font-mono text-amber-900">{Math.round(form.tvaNette).toLocaleString('fr-FR')} EUR</span>
+                  </div>
+                </CardContent>
+              </Card>
+            </>
+          )}
+        </TabsContent>
+      </Tabs>
     </div>
   )
 }

@@ -89,7 +89,15 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // TVA collectée from income transactions (when no formal invoice exists)
+    // BUG-004 FIX: TVA collectée from income transactions only when no matching invoice exists
+    // Build a set of (date, amount) tuples from invoices to detect duplicates
+    const invoiceSignatures = new Set<string>()
+    for (const inv of invoices) {
+      const invDate = new Date(inv.date)
+      const dateKey = `${invDate.getFullYear()}-${String(invDate.getMonth() + 1).padStart(2, '0')}-${String(invDate.getDate()).padStart(2, '0')}`
+      invoiceSignatures.add(`${dateKey}:${inv.totalTTC.toFixed(2)}`)
+    }
+
     const incomeTransactions = await db.transaction.findMany({
       where: {
         date: { gte: startDate, lte: endDate },
@@ -102,6 +110,14 @@ export async function POST(request: NextRequest) {
     console.log(`Found ${incomeTransactions.length} income transactions for TVA collectée`)
 
     for (const t of incomeTransactions) {
+      // BUG-004 FIX: Skip transactions that match an invoice (same date + amount)
+      const tDate = new Date(t.date)
+      const dateKey = `${tDate.getFullYear()}-${String(tDate.getMonth() + 1).padStart(2, '0')}-${String(tDate.getDate()).padStart(2, '0')}`
+      if (invoiceSignatures.has(`${dateKey}:${t.amount.toFixed(2)}`)) {
+        console.log(`Skipping duplicate income transaction: ${t.description} (${t.amount}) - matches invoice`)
+        continue
+      }
+
       const amountTTC = Math.abs(t.amount)
       const rate = t.category?.defaultTvaRate ?? 0.20
       if (rate > 0) {

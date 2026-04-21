@@ -21,7 +21,7 @@ import {
   TrendingDown, Euro, Clock, CheckCircle, Plus, Download,
   Bell, Building2, Loader2, Receipt, PiggyBank, CreditCard,
   ArrowUpRight, ArrowDownRight, Minus, Paperclip, X, Eye,
-  BarChart3, LineChart, PieChart, Wallet, Percent
+  BarChart3, LineChart, Wallet, Percent
 } from 'lucide-react'
 import { LiasseFiscaleSection } from '@/components/liasse-fiscale-section'
 import { DeclarationsSection } from '@/components/declarations-section'
@@ -40,7 +40,7 @@ interface Transaction {
   type: string
   labeled: boolean
   categoryId: string | null
-  category: { id: string; name: string; color: string } | null
+  category: { id: string; name: string; color: string; taxDeductible: boolean; defaultTvaRate: number } | null
   receiptUrl: string | null
   receiptName: string | null
   notes: string | null
@@ -231,7 +231,38 @@ function TaxDashboardContent() {
   const totalExpenses = Math.abs(filteredTransactions.filter(t => t.amount < 0).reduce((sum, t) => sum + t.amount, 0))
   const netProfit = totalIncome - totalExpenses
   const unlabeledCount = transactions.filter(t => !t.labeled).length
-  const filteredUnlabeledCount = filteredTransactions.filter(t => !t.labeled).length
+
+  // BUG-001/002 FIX: Calculate HT totals using per-category TVA rates
+  const totalIncomeHT = filteredTransactions
+    .filter(t => t.amount > 0)
+    .reduce((sum, t) => {
+      const rate = t.category?.defaultTvaRate ?? 0.20
+      return sum + (t.amount / (1 + rate))
+    }, 0)
+  const totalExpensesHT = filteredTransactions
+    .filter(t => t.amount < 0)
+    .reduce((sum, t) => {
+      const rate = t.category?.defaultTvaRate ?? 0
+      return sum + (Math.abs(t.amount) / (1 + rate))
+    }, 0)
+  const netProfitHT = totalIncomeHT - totalExpensesHT
+
+  // BUG-002 FIX: TVA collectée using per-category rates (only from income)
+  const tvaCollectee = filteredTransactions
+    .filter(t => t.amount > 0)
+    .reduce((sum, t) => {
+      const rate = t.category?.defaultTvaRate ?? 0.20
+      if (rate <= 0) return sum
+      return sum + (t.amount * rate / (1 + rate))
+    }, 0)
+  // BUG-002 FIX: TVA déductible using per-category rates (only from tax-deductible expenses)
+  const tvaDeductible = filteredTransactions
+    .filter(t => t.amount < 0 && t.category?.taxDeductible)
+    .reduce((sum, t) => {
+      const rate = t.category?.defaultTvaRate ?? 0
+      if (rate <= 0) return sum
+      return sum + (Math.abs(t.amount) * rate / (1 + rate))
+    }, 0)
 
   // Calculate monthly data for charts
   const getMonthlyData = () => {
@@ -294,9 +325,9 @@ function TaxDashboardContent() {
     tresorerie: { label: "Trésorerie", color: "#8B5CF6" },
   } satisfies ChartConfig
 
-  // Pagination
-  const totalPages = Math.ceil(transactions.length / itemsPerPage)
-  const paginatedTransactions = transactions.slice(
+  // BUG-032 FIX: Pagination uses filteredTransactions
+  const totalPages = Math.ceil(filteredTransactions.length / itemsPerPage)
+  const paginatedTransactions = filteredTransactions.slice(
     (currentPage - 1) * itemsPerPage,
     currentPage * itemsPerPage
   )
@@ -494,11 +525,13 @@ function TaxDashboardContent() {
     }).format(amount)
   }
 
-  // Calculate IS
+  // BUG-006 FIX: Calculate IS with proper rounding
   const calculateIS = (profit: number) => {
     if (profit <= 0) return 0
-    if (profit <= 42500) return profit * 0.15
-    return (42500 * 0.15) + ((profit - 42500) * 0.25)
+    if (profit <= 42500) return Math.round(profit * 0.15 * 100) / 100
+    const reduced = Math.round(42500 * 0.15 * 100) / 100
+    const standard = Math.round((profit - 42500) * 0.25 * 100) / 100
+    return reduced + standard
   }
 
   // Add invoice item
@@ -547,7 +580,7 @@ function TaxDashboardContent() {
           clientName: invoiceClient.name,
           clientAddress: invoiceClient.address,
           clientSIRET: invoiceClient.siret,
-          clientTVA: invoiceClient.tva,
+          clientTVAIntra: invoiceClient.tva,
           items: invoiceItems,
           tvaRate: invoiceTvaRate,
         }),
@@ -868,14 +901,14 @@ function TaxDashboardContent() {
                       </div>
                       <div className="flex justify-between">
                         <span className="text-muted-foreground">Votre CA actuel (HT)</span>
-                        <span className="font-medium text-emerald-600">{formatCurrency(totalIncome / 1.20)}</span>
+                        <span className="font-medium text-emerald-600">{formatCurrency(totalIncomeHT)}</span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-muted-foreground">Marge restante</span>
-                        <span className="font-medium text-blue-600">{formatCurrency(Math.max(0, 37500 - totalIncome / 1.20))}</span>
+                        <span className="font-medium text-blue-600">{formatCurrency(Math.max(0, 37500 - totalIncomeHT))}</span>
                       </div>
                     </div>
-                    <Progress value={Math.min(100, (totalIncome / 1.20 / 37500) * 100)} className="h-2" />
+                    <Progress value={Math.min(100, (totalIncomeHT / 37500) * 100)} className="h-2" />
                   </div>
                 ) : (
                   <div className="space-y-4">
@@ -888,23 +921,23 @@ function TaxDashboardContent() {
                     
                     <div className="grid grid-cols-2 gap-4">
                       <div className="p-3 bg-red-50 rounded-lg">
-                        <p className="text-xs text-muted-foreground">TVA collectée (20%)</p>
-                        <p className="text-lg font-bold text-red-600">{formatCurrency(totalIncome * 0.20 / 1.20)}</p>
-                        <p className="text-xs text-muted-foreground mt-1">Sur {formatCurrency(totalIncome / 1.20)} HT</p>
+                        <p className="text-xs text-muted-foreground">TVA collectée (estimée)</p>
+                        <p className="text-lg font-bold text-red-600">{formatCurrency(tvaCollectee)}</p>
+                        <p className="text-xs text-muted-foreground mt-1">Sur {formatCurrency(totalIncomeHT)} HT</p>
                       </div>
                       <div className="p-3 bg-green-50 rounded-lg">
-                        <p className="text-xs text-muted-foreground">TVA déductible</p>
-                        <p className="text-lg font-bold text-green-600">{formatCurrency(totalExpenses * 0.20 / 1.20)}</p>
-                        <p className="text-xs text-muted-foreground mt-1">Sur {formatCurrency(totalExpenses / 1.20)} HT</p>
+                        <p className="text-xs text-muted-foreground">TVA déductible (estimée)</p>
+                        <p className="text-lg font-bold text-green-600">{formatCurrency(tvaDeductible)}</p>
+                        <p className="text-xs text-muted-foreground mt-1">Sur achats déductibles HT</p>
                       </div>
                     </div>
                     
                     <Separator />
                     
                     <div className="flex justify-between items-center p-3 bg-muted rounded-lg">
-                      <span className="text-sm font-medium">TVA nette à payer</span>
+                      <span className="text-sm font-medium">TVA nette à payer (estimée)</span>
                       <span className="text-lg font-bold text-amber-600">
-                        {formatCurrency(Math.max(0, (totalIncome * 0.20 / 1.20) - (totalExpenses * 0.20 / 1.20)))}
+                        {formatCurrency(Math.max(0, tvaCollectee - tvaDeductible))}
                       </span>
                     </div>
                     
@@ -915,8 +948,9 @@ function TaxDashboardContent() {
                         <Badge variant="outline" className="bg-amber-100">
                           {(() => {
                             const now = new Date()
-                            const currentYear = now.getFullYear()
-                            const deadline = new Date(currentYear + 1, 4, 3) // May 3rd of next year
+                            const fyEnd = selectedFiscalYear
+                            // CA12 is due May 3rd of the year after fiscal year end
+                            const deadline = new Date(fyEnd + 1, 4, 3)
                             const days = Math.ceil((deadline.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
                             return days > 0 ? `${days} jours` : 'À rendre'
                           })()}
@@ -945,13 +979,13 @@ function TaxDashboardContent() {
                   <div className="grid grid-cols-2 gap-4">
                     <div className="p-3 bg-blue-50 rounded-lg">
                       <p className="text-xs text-muted-foreground">Bénéfice fiscal (est. HT)</p>
-                      <p className={`text-lg font-bold ${netProfit >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-                        {formatCurrency(netProfit / 1.20)}
+                      <p className={`text-lg font-bold ${netProfitHT >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                        {formatCurrency(netProfitHT)}
                       </p>
                     </div>
                     <div className="p-3 bg-purple-50 rounded-lg">
                       <p className="text-xs text-muted-foreground">IS estimé (sur base HT)</p>
-                      <p className="text-lg font-bold text-purple-600">{formatCurrency(calculateIS(netProfit / 1.20))}</p>
+                      <p className="text-lg font-bold text-purple-600">{formatCurrency(calculateIS(netProfitHT))}</p>
                     </div>
                   </div>
                   
@@ -960,23 +994,23 @@ function TaxDashboardContent() {
                   <div className="space-y-2">
                     <p className="text-sm font-medium">Prochains paiements d'IS</p>
                     <div className="space-y-2 text-sm">
-                      {netProfit > 0 && (
+                      {netProfitHT > 0 && (
                         <>
                           <div className="flex justify-between items-center p-2 bg-muted rounded">
                             <span>Acompte Q1 (15 mars)</span>
-                            <span className="font-mono">{formatCurrency(calculateIS(netProfit / 1.20) / 4)}</span>
+                            <span className="font-mono">{formatCurrency(calculateIS(netProfitHT) / 4)}</span>
                           </div>
                           <div className="flex justify-between items-center p-2 bg-muted rounded">
                             <span>Acompte Q2 (15 juin)</span>
-                            <span className="font-mono">{formatCurrency(calculateIS(netProfit / 1.20) / 4)}</span>
+                            <span className="font-mono">{formatCurrency(calculateIS(netProfitHT) / 4)}</span>
                           </div>
                           <div className="flex justify-between items-center p-2 bg-muted rounded">
                             <span>Acompte Q3 (15 sept.)</span>
-                            <span className="font-mono">{formatCurrency(calculateIS(netProfit / 1.20) / 4)}</span>
+                            <span className="font-mono">{formatCurrency(calculateIS(netProfitHT) / 4)}</span>
                           </div>
                           <div className="flex justify-between items-center p-2 bg-muted rounded">
                             <span>Acompte Q4 (15 déc.)</span>
-                            <span className="font-mono">{formatCurrency(calculateIS(netProfit / 1.20) / 4)}</span>
+                            <span className="font-mono">{formatCurrency(calculateIS(netProfitHT) / 4)}</span>
                           </div>
                         </>
                       )}

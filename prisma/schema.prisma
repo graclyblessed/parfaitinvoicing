@@ -79,6 +79,7 @@ model Settings {
   fiscalYearEnd   Int      @default(12) // Month (12 = December)
   email           String
   googleCalendarId String?
+  capital         Float    @default(0)    // BUG-009 FIX: Capital social for bilan
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 }

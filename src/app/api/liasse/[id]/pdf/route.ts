@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { PrismaClient } from '@prisma/client'
+import { db } from '@/lib/db'
 import PDFDocument from 'pdfkit'
-
-const prisma = new PrismaClient()
 
 export async function GET(
   request: NextRequest,
@@ -11,7 +9,7 @@ export async function GET(
   try {
     const { id } = await params
     
-    const liasse = await prisma.liasseFiscale.findUnique({
+    const liasse = await db.liasseFiscale.findUnique({
       where: { id }
     })
 
@@ -20,7 +18,7 @@ export async function GET(
     }
 
     // Get settings
-    const settings = await prisma.settings.findFirst()
+    const settings = await db.settings.findFirst()
 
     // Create PDF
     const doc = new PDFDocument({
@@ -53,9 +51,9 @@ export async function GET(
     // Helper functions
     const formatCurrency = (amount: number) => {
       return new Intl.NumberFormat('fr-FR', {
-        minimumFractionDigits: 0,
-        maximumFractionDigits: 0
-      }).format(Math.round(amount)) + ' €'
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+      }).format(amount) + ' \u20AC'
     }
 
     const drawTable = (title: string, rows: Array<{ label: string; value: number; bold?: boolean }>) => {

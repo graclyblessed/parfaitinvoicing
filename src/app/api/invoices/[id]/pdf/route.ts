@@ -68,6 +68,10 @@ export async function GET(
     if (invoice.clientSIRET) {
       doc.text(`SIRET: ${invoice.clientSIRET}`, 60, 225)
     }
+    // BUG-024 FIX: Show client TVA intracommunautaire on invoice
+    if (invoice.clientTVAIntra) {
+      doc.text(`TVA Intracommunautaire: ${invoice.clientTVAIntra}`, 60, 237)
+    }
 
     // Items table header
     let y = 280

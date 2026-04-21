@@ -82,9 +82,16 @@ export async function GET(request: NextRequest) {
       .filter(t => t.amount < 0 && t.category?.taxDeductible)
       .reduce((sum, t) => sum + t.amount, 0))
     
-    const netResult = totalIncome - totalExpenses
-    const estimatedIS = netResult > 0
-      ? (netResult <= 42500 ? netResult * 0.15 : (42500 * 0.15) + ((netResult - 42500) * 0.25))
+    // BUG-017 FIX: Calculate IS on HT basis using per-category TVA rates
+    const totalIncomeHT = transactions
+      .filter(t => t.amount > 0)
+      .reduce((sum, t) => sum + (t.amount / (1 + (t.category?.defaultTvaRate ?? 0.20))), 0)
+    const totalDeductibleExpensesHT = transactions
+      .filter(t => t.amount < 0 && t.category?.taxDeductible)
+      .reduce((sum, t) => sum + (Math.abs(t.amount) / (1 + (t.category?.defaultTvaRate ?? 0))), 0)
+    const netResultHT = totalIncomeHT - totalDeductibleExpensesHT
+    const estimatedIS = netResultHT > 0
+      ? (netResultHT <= 42500 ? netResultHT * 0.15 : (42500 * 0.15) + ((netResultHT - 42500) * 0.25))
       : 0
 
     const summaryData = [
@@ -94,17 +101,19 @@ export async function GET(request: NextRequest) {
       { 'Rubrique': 'Exercice', 'Valeur': year || new Date().getFullYear().toString(), 'Montant': '' },
       { 'Rubrique': '', 'Valeur': '', 'Montant': '' },
       { 'Rubrique': 'REVENUS', 'Valeur': '', 'Montant': '' },
-      { 'Rubrique': 'Total revenus', 'Valeur': `${transactions.filter(t => t.amount > 0).length} transactions`, 'Montant': totalIncome },
+      { 'Rubrique': 'Total revenus (TTC)', 'Valeur': `${transactions.filter(t => t.amount > 0).length} transactions`, 'Montant': totalIncome },
+      { 'Rubrique': 'Total revenus (HT)', 'Valeur': '', 'Montant': Math.round(totalIncomeHT * 100) / 100 },
       { 'Rubrique': '', 'Valeur': '', 'Montant': '' },
       { 'Rubrique': 'DÉPENSES', 'Valeur': '', 'Montant': '' },
-      { 'Rubrique': 'Total dépenses', 'Valeur': `${transactions.filter(t => t.amount < 0).length} transactions`, 'Montant': totalExpenses },
-      { 'Rubrique': 'Dont déductibles', 'Valeur': '', 'Montant': deductibleExpenses },
+      { 'Rubrique': 'Total dépenses (TTC)', 'Valeur': `${transactions.filter(t => t.amount < 0).length} transactions`, 'Montant': totalExpenses },
+      { 'Rubrique': 'Dont déductibles (TTC)', 'Valeur': '', 'Montant': deductibleExpenses },
+      { 'Rubrique': 'Dont déductibles (HT)', 'Valeur': '', 'Montant': Math.round(totalDeductibleExpensesHT * 100) / 100 },
       { 'Rubrique': '', 'Valeur': '', 'Montant': '' },
       { 'Rubrique': 'RÉSULTAT', 'Valeur': '', 'Montant': '' },
-      { 'Rubrique': 'Bénéfice net', 'Valeur': '', 'Montant': netResult },
+      { 'Rubrique': 'Bénéfice net (HT)', 'Valeur': '', 'Montant': Math.round(netResultHT * 100) / 100 },
       { 'Rubrique': '', 'Valeur': '', 'Montant': '' },
       { 'Rubrique': 'IMPÔT SOCIÉTÉS', 'Valeur': '', 'Montant': '' },
-      { 'Rubrique': 'IS estimé', 'Valeur': '', 'Montant': Math.max(0, estimatedIS) },
+      { 'Rubrique': 'IS estimé (sur base HT)', 'Valeur': '', 'Montant': Math.max(0, Math.round(estimatedIS * 100) / 100) },
     ]
     
     const summarySheet = XLSX.utils.json_to_sheet(summaryData)

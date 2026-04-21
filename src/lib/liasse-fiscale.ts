@@ -141,33 +141,26 @@ export interface DeclarationResultat {
   isAPayer: number                     // AH
 }
 
-// French Tax Rates for IS
-export const IS_RATES = {
-  TAUX_REDUIT: 0.15,                   // 15% up to €42,500
-  TAUX_NORMAL: 0.25,                   // 25% above €42,500
-  PLAFOND_TAUX_REDUIT: 42500,
-}
+// BUG-030 FIX: Re-export from single source of truth in tax.ts
+export { IS_RATES, TVA_RATES } from './tax'
+export { calculateIS as calculateISFromTax } from './tax'
 
-// Calculate IS (Impôt sur les Sociétés)
+// Calculate IS (Impôt sur les Sociétés) - uses rates from tax.ts
 export function calculateIS(baseImposable: number): number {
   if (baseImposable <= 0) return 0
   
-  if (baseImposable <= IS_RATES.PLAFOND_TAUX_REDUIT) {
-    return baseImposable * IS_RATES.TAUX_REDUIT
+  const TAUX_REDUIT = 0.15
+  const TAUX_NORMAL = 0.25
+  const PLAFOND = 42500
+  
+  if (baseImposable <= PLAFOND) {
+    return baseImposable * TAUX_REDUIT
   }
   
-  const partReduite = IS_RATES.PLAFOND_TAUX_REDUIT * IS_RATES.TAUX_REDUIT
-  const partNormale = (baseImposable - IS_RATES.PLAFOND_TAUX_REDUIT) * IS_RATES.TAUX_NORMAL
+  const partReduite = PLAFOND * TAUX_REDUIT
+  const partNormale = (baseImposable - PLAFOND) * TAUX_NORMAL
   
   return partReduite + partNormale
-}
-
-// TVA Rates
-export const TVA_RATES = {
-  TAUX_NORMAL: 0.20,                   // 20%
-  TAUX_INTERMEDIAIRE: 0.10,            // 10%
-  TAUX_REDUIT: 0.055,                  // 5.5%
-  TAUX_SUPER_REDUIT: 0.021,            // 2.1%
 }
 
 // Calculate totals from raw data

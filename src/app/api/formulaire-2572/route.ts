@@ -67,7 +67,8 @@ export async function POST(request: NextRequest) {
 
     for (const t of transactions) {
       const amountTTC = Math.abs(t.amount)
-      const rate = t.category?.defaultTvaRate ?? 0.20
+      // BUG-007 FIX: Use 0 for uncategorized transactions, not 0.20
+      const rate = t.category?.defaultTvaRate ?? 0
       const amountHT = Math.round((amountTTC / (1 + rate)) * 100) / 100
 
       if (t.type === 'income') {
@@ -166,7 +167,8 @@ export async function POST(request: NextRequest) {
           where: { year: targetYear - 1 }
         })
         if (previousYearFormulaire) {
-          previousYearIS = previousYearFormulaire.totalISBrut || 0
+        // BUG-029 FIX: Use totalISNet (after credits) instead of totalISBrut
+          previousYearIS = previousYearFormulaire.totalISNet || 0
         }
       }
 
@@ -259,13 +261,15 @@ export async function POST(request: NextRequest) {
         baseTauxReduit,
         isTauxReduit,
 
-        // Section 4
+        // Section 4 - BUG-016 FIX: Include creditImpotCompetitivite and creditImpotAgri
         creditImpotRecherche,
         creditImpotInnovation,
         creditImpotCooperation,
         creditImpotApprentissage,
         creditImpotFamille,
         creditImpotMEC,
+        creditImpotCompetitivite: 0,
+        creditImpotAgri: 0,
         creditImpotAutres,
         totalCreditsImpot,
 

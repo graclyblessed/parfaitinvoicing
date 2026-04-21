@@ -37,8 +37,8 @@ const CATEGORY_TO_LIASSE: Record<string, {
   'Rémunération': { field: 'chargesPersonnel', section: 'charge', line2033: '2033-D H' },
   'Impôts et taxes': { field: 'impotsTaxes', section: 'charge', line2033: '2033-D I' },
   
-  // Non-deductible
-  'Dividendes': { field: 'chargesExceptionnelles', section: 'charge', line2033: '2033-D N' },
+  // Non-deductible - BUG-014 FIX: Dividendes are NOT charges, they're profit distribution
+  'Dividendes': { field: 'nonDeductible', section: 'charge' },
   'Dépenses diverses justifiées': { field: 'servicesExterieurs', section: 'charge', line2033: '2033-D G' },
   'Retrait espèces': { field: 'nonDeductible', section: 'charge' },
   'Non catégorisé': { field: 'autresCharges', section: 'charge', line2033: '2033-D G' },
@@ -71,14 +71,14 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { year, fiscalYearStartMonth = 12, fiscalYearEndMonth = 11 } = body
+    const { year } = body
 
     // For fiscal year ending Nov 30, 2026 (year=2026), we need transactions from Dec 1, 2025 to Nov 30, 2026
     const targetYear = year || new Date().getFullYear() - 1
     
     // Fiscal year: starts December of previous year, ends November of target year
-    const startDate = new Date(targetYear - 1, fiscalYearStartMonth - 1, 1) // Dec 1 of previous year
-    const endDate = new Date(targetYear, fiscalYearEndMonth, 0) // Nov 30 of target year
+    const startDate = new Date(targetYear - 1, 11, 1) // Dec 1 of previous year
+    const endDate = new Date(targetYear, 10, 30, 23, 59, 59, 999) // Nov 30 of target year
 
     console.log(`Generating liasse for fiscal year ${targetYear}`)
     console.log(`Date range: ${startDate.toISOString()} to ${endDate.toISOString()}`)
@@ -100,6 +100,29 @@ export async function POST(request: NextRequest) {
 
     // Get settings
     const settings = await db.settings.findFirst()
+
+    // BUG-008 FIX: Read capital from settings (default to 0 if not set)
+    const companyCapital = settings?.capital || 0
+
+    // BUG-011 FIX: Compute TVA data for liasse from transactions
+    let liasseTvaCollectee = 0
+    let liasseTvaDeductible = 0
+    for (const t of transactions) {
+      const amountTTC = Math.abs(t.amount)
+      const rate = t.category?.defaultTvaRate ?? 0
+      if (rate > 0) {
+        const tva = Math.round((amountTTC * rate / (1 + rate)) * 100) / 100
+        if (t.type === 'income') {
+          liasseTvaCollectee += tva
+        } else if (t.type === 'expense' && t.category?.taxDeductible) {
+          liasseTvaDeductible += tva
+        }
+      }
+    }
+    liasseTvaCollectee = Math.round(liasseTvaCollectee * 100) / 100
+    liasseTvaDeductible = Math.round(liasseTvaDeductible * 100) / 100
+    const liasseTvaDue = Math.round((liasseTvaCollectee - liasseTvaDeductible) * 100) / 100
+    console.log(`Liasse TVA: collectée=${liasseTvaCollectee}, déductible=${liasseTvaDeductible}, due=${liasseTvaDue}`)
 
     // Initialize all fields
     const liasseData: Record<string, number> = {
@@ -140,8 +163,8 @@ export async function POST(request: NextRequest) {
     for (const t of transactions) {
       const catName = t.category?.name || 'Non catégorisé'
       const amountTTC = Math.abs(t.amount)
-      // Convert TTC to HT using the category's default TVA rate
-      const tvaRate = t.category?.defaultTvaRate ?? 0.20
+      // BUG-007 FIX: Use 0 for uncategorized expenses, not 0.20
+      const tvaRate = t.category?.defaultTvaRate ?? 0
       const amountHT = Math.round((amountTTC / (1 + tvaRate)) * 100) / 100
       
       // Track category breakdown (in HT)
@@ -188,11 +211,13 @@ export async function POST(request: NextRequest) {
 
     // Calculate totals (all in HT)
     const totalProduits = Math.round((liasseData.chiffreAffaires + liasseData.autresProduits) * 100) / 100
+    // BUG-010 FIX: Include dotationsProvisions in totalCharges
     const totalCharges = Math.round((liasseData.achats + 
                         liasseData.servicesExterieurs + 
                         liasseData.chargesPersonnel + 
                         liasseData.impotsTaxes + 
                         liasseData.dotationsAmort + 
+                        liasseData.dotationsProvisions +
                         liasseData.chargesFinancieres + 
                         liasseData.chargesExceptionnelles) * 100) / 100
 
@@ -259,18 +284,18 @@ export async function POST(request: NextRequest) {
         totalActif: Math.max(0, disponibilites),
         
         // Passif (Bilan)
-        capital: 1000, // Minimum capital social
+        capital: companyCapital,
         reserves: 0,
         reportANouveau: 0,
         resultatExercice: resultatNet,
-        totalCapitauxPropres: 1000 + resultatNet,
+        totalCapitauxPropres: companyCapital + resultatNet,
         emprunts: 0,
         dettesFournisseurs: 0,
         dettesFiscales: isAPayer,
         dettesSociales: 0,
         autresDettes: 0,
         totalDettes: isAPayer,
-        totalPassif: 1000 + resultatNet + isAPayer,
+        totalPassif: companyCapital + resultatNet + isAPayer,
         
         // Compte de résultat
         chiffreAffaires: liasseData.chiffreAffaires,
@@ -314,9 +339,9 @@ export async function POST(request: NextRequest) {
         materielsBureau: 0,
         materielsInfo: 0,
         vehicules: 0,
-        tvaCollectee: 0,
-        tvaDeductible: 0,
-        tvaDue: 0,
+        tvaCollectee: liasseTvaCollectee,
+        tvaDeductible: liasseTvaDeductible,
+        tvaDue: liasseTvaDue,
         remunerationGerant: liasseData.remunerationGerant,
         cotisationsSociales: liasseData.cotisationsSociales,
         
@@ -336,10 +361,11 @@ export async function POST(request: NextRequest) {
         totalActifCirculant: Math.max(0, disponibilites),
         totalActif: Math.max(0, disponibilites),
         resultatExercice: resultatNet,
-        totalCapitauxPropres: 1000 + resultatNet,
+        totalCapitauxPropres: companyCapital + resultatNet,
+        capital: companyCapital,
         dettesFiscales: isAPayer,
         totalDettes: isAPayer,
-        totalPassif: 1000 + resultatNet + isAPayer,
+        totalPassif: companyCapital + resultatNet + isAPayer,
         chiffreAffaires: liasseData.chiffreAffaires,
         autresProduits: liasseData.autresProduits,
         totalProduits,
@@ -430,14 +456,14 @@ export async function PUT(request: NextRequest) {
     const resultatCourant = totalProduits - totalCharges
     const resultatNet = resultatCourant + (data.resultatExceptionnel || 0) - (data.impotSurSocietes || 0)
 
-    // Calculate IS
+    // BUG-013 FIX: Calculate IS on resultatCourant (before exceptionnel and IS), not resultatNet
     let isAPayer = 0
     const baseImposableIS = Math.max(0, resultatCourant)
     if (baseImposableIS > 0) {
       if (baseImposableIS <= 42500) {
-        isAPayer = baseImposableIS * 0.15
+        isAPayer = Math.round(baseImposableIS * 0.15 * 100) / 100
       } else {
-        isAPayer = (42500 * 0.15) + ((baseImposableIS - 42500) * 0.25)
+        isAPayer = Math.round((42500 * 0.15 + (baseImposableIS - 42500) * 0.25) * 100) / 100
       }
     }
 

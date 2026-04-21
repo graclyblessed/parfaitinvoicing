@@ -68,7 +68,7 @@ export async function POST(request: NextRequest) {
     for (const t of transactions) {
       const amountTTC = Math.abs(t.amount)
       const rate = t.category?.defaultTvaRate ?? 0.20
-      const amountHT = amountTTC / (1 + rate)
+      const amountHT = Math.round((amountTTC / (1 + rate)) * 100) / 100
 
       if (t.type === 'income') {
         totalIncomeHT += amountHT
@@ -77,7 +77,11 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const result = totalIncomeHT - totalDeductibleExpensesHT
+    // Round accumulated totals
+    totalIncomeHT = Math.round(totalIncomeHT * 100) / 100
+    totalDeductibleExpensesHT = Math.round(totalDeductibleExpensesHT * 100) / 100
+
+    const result = Math.round((totalIncomeHT - totalDeductibleExpensesHT) * 100) / 100
 
     // Fetch the existing liasse for this year to get calculated IS values
     const liasse = await db.liasseFiscale.findUnique({

@@ -675,19 +675,19 @@ export function DeclarationsSection({ settings }: DeclarationsSectionProps) {
                             <TableRow>
                               <TableHead>Acompte</TableHead>
                               <TableHead>Date limite</TableHead>
-                              <TableHead>Montant (55%)</TableHead>
+                              <TableHead>Montant</TableHead>
                             </TableRow>
                           </TableHeader>
                           <TableBody>
                             <TableRow>
-                              <TableCell>1er acompte</TableCell>
+                              <TableCell>1er acompte (55%)</TableCell>
                               <TableCell className="font-mono">15 juillet {selectedYear}</TableCell>
                               <TableCell className="font-mono">{formatCurrency(tvaDue * 0.55)}</TableCell>
                             </TableRow>
                             <TableRow>
-                              <TableCell>2e acompte</TableCell>
+                              <TableCell>2e acompte (40%)</TableCell>
                               <TableCell className="font-mono">15 décembre {selectedYear}</TableCell>
-                              <TableCell className="font-mono">{formatCurrency(tvaDue * 0.55)}</TableCell>
+                              <TableCell className="font-mono">{formatCurrency(tvaDue * 0.40)}</TableCell>
                             </TableRow>
                           </TableBody>
                         </Table>

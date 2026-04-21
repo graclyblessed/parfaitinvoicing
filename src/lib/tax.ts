@@ -1,5 +1,10 @@
 // French tax calculations and utilities for SASU
 
+/** Round to 2 decimal places (centime precision) */
+export function round2(value: number): number {
+  return Math.round(value * 100) / 100
+}
+
 // IS (Impôt sur les Sociétés) rates for 2025
 export const IS_RATES = {
   reduced: 0.15, // First €42,500 of profit
@@ -47,10 +52,10 @@ export function calculateIS(profit: number): { reduced: number; standard: number
 // IS quarterly payment schedule
 export function getISPaymentDates(year: number): Array<{ quarter: number; dueDate: Date; amount: number | null }> {
   return [
-    { quarter: 1, dueDate: new Date(year, 3, 25), amount: null },  // April 25
-    { quarter: 2, dueDate: new Date(year, 6, 25), amount: null },  // July 25
-    { quarter: 3, dueDate: new Date(year, 9, 25), amount: null },  // October 25
-    { quarter: 4, dueDate: new Date(year + 1, 0, 25), amount: null }, // January 25 next year
+    { quarter: 1, dueDate: new Date(year, 2, 15), amount: null },   // March 15
+    { quarter: 2, dueDate: new Date(year, 5, 15), amount: null },   // June 15
+    { quarter: 3, dueDate: new Date(year, 8, 15), amount: null },   // September 15
+    { quarter: 4, dueDate: new Date(year, 11, 15), amount: null },  // December 15
   ]
 }
 
@@ -97,8 +102,8 @@ export function generateTaxDeadlines(year: number): TaxDeadline[] {
     name: 'TVA - Déclaration annuelle (CA12)',
     type: 'TVA',
     dueDate: new Date(year, 4, 3), // May 3rd (2nd working day after May 1st)
-    periodStart: new Date(year - 1, 0, 1),
-    periodEnd: new Date(year - 1, 11, 31),
+    periodStart: new Date(year - 2, 11, 1),  // Dec 1 of year-2 (fiscal year start)
+    periodEnd: new Date(year - 1, 10, 30),    // Nov 30 of year-1 (fiscal year end)
     description: 'Déclaration annuelle de TVA - Régime simplifié',
     penalty: 'Pénalité de 10% + intérêts de retard',
   })
@@ -108,9 +113,9 @@ export function generateTaxDeadlines(year: number): TaxDeadline[] {
     id: `LIASSE-${year}`,
     name: 'Liasse Fiscale + Bilan',
     type: 'LIASSE',
-    dueDate: new Date(year, 4, 18), // May 18 (for calendar year companies)
-    periodStart: new Date(year - 1, 0, 1),
-    periodEnd: new Date(year - 1, 11, 31),
+    dueDate: new Date(year, 4, 3), // May 3rd (same as CA12 for Réel Simplifié)
+    periodStart: new Date(year - 2, 11, 1),  // Dec 1 of year-2 (fiscal year start)
+    periodEnd: new Date(year - 1, 10, 30),    // Nov 30 of year-1 (fiscal year end)
     description: 'Déclaration de résultats et liasse fiscale - Régime simplifié',
     penalty: 'Pénalité de 10% minimum',
   })
@@ -131,8 +136,8 @@ export function generateTaxDeadlines(year: number): TaxDeadline[] {
     name: 'DAS2 - Honoraires versés',
     type: 'DAS2',
     dueDate: new Date(year, 0, 31), // January 31
-    periodStart: new Date(year - 1, 0, 1),
-    periodEnd: new Date(year - 1, 11, 31),
+    periodStart: new Date(year - 2, 11, 1),  // Dec 1 of year-2 (fiscal year start)
+    periodEnd: new Date(year - 1, 10, 30),    // Nov 30 of year-1 (fiscal year end)
     description: 'Déclaration des honoraires, commissions et ristournes',
     penalty: 'Pénalité de 10%',
   })
@@ -230,7 +235,7 @@ export function calculateCashFlow(
     
     const expenses = monthTransactions
       .filter(t => t.type === 'expense')
-      .reduce((sum, t) => sum + t.amount, 0)
+      .reduce((sum, t) => sum + Math.abs(t.amount), 0)
     
     // Estimate tax payments for this month
     let taxPayments = 0

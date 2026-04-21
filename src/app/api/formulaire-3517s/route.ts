@@ -106,8 +106,8 @@ export async function POST(request: NextRequest) {
       const rate = t.category?.defaultTvaRate ?? 0.20
       if (rate > 0) {
         // TTC → HT: HT = TTC / (1 + rate)
-        const ht = amountTTC / (1 + rate)
-        const tva = amountTTC - ht
+        const ht = Math.round((amountTTC / (1 + rate)) * 100) / 100
+        const tva = Math.round((amountTTC - ht) * 100) / 100
         switch (rate) {
           case 0.20: baseHT20 += ht; tvaCollectee20 += tva; break
           case 0.10: baseHT10 += ht; tvaCollectee10 += tva; break
@@ -161,7 +161,7 @@ export async function POST(request: NextRequest) {
       
       // Correct TTC → TVA formula: TVA = amountTTC × rate / (1 + rate)
       if (rate > 0) {
-        const tva = amountTTC * rate / (1 + rate)
+        const tva = Math.round((amountTTC * rate / (1 + rate)) * 100) / 100
         tvaDeductibleBiensServices += tva
         categoryBreakdown[catName].tvaAmount += tva
       }
@@ -179,14 +179,25 @@ export async function POST(request: NextRequest) {
 
     const nombreAchats = expenseTransactions.length
 
-    // 3. Calculate totals
-    const totalTVABrute = tvaCollectee20 + tvaCollectee10 + tvaCollectee55 + tvaCollectee21
-    const totalBaseHT = baseHT20 + baseHT10 + baseHT55 + baseHT21
-    const totalTVADeductible = tvaDeductibleBiensServices + tvaDeductibleImmobilisations
+    // 3. Round all TVA totals to centime precision
+    baseHT20 = Math.round(baseHT20 * 100) / 100
+    baseHT10 = Math.round(baseHT10 * 100) / 100
+    baseHT55 = Math.round(baseHT55 * 100) / 100
+    baseHT21 = Math.round(baseHT21 * 100) / 100
+    tvaCollectee20 = Math.round(tvaCollectee20 * 100) / 100
+    tvaCollectee10 = Math.round(tvaCollectee10 * 100) / 100
+    tvaCollectee55 = Math.round(tvaCollectee55 * 100) / 100
+    tvaCollectee21 = Math.round(tvaCollectee21 * 100) / 100
+    tvaDeductibleBiensServices = Math.round(tvaDeductibleBiensServices * 100) / 100
+    tvaDeductibleImmobilisations = Math.round(tvaDeductibleImmobilisations * 100) / 100
+
+    const totalTVABrute = Math.round((tvaCollectee20 + tvaCollectee10 + tvaCollectee55 + tvaCollectee21) * 100) / 100
+    const totalBaseHT = Math.round((baseHT20 + baseHT10 + baseHT55 + baseHT21) * 100) / 100
+    const totalTVADeductible = Math.round((tvaDeductibleBiensServices + tvaDeductibleImmobilisations) * 100) / 100
     const totalDeductions = totalTVADeductible
-    const tvaNette = totalTVABrute - totalTVADeductible
-    const creditTVA = Math.max(0, -tvaNette)
-    const tvaNetteDue = Math.max(0, tvaNette)
+    const tvaNette = Math.round((totalTVABrute - totalTVADeductible) * 100) / 100
+    const creditTVA = Math.round(Math.max(0, -tvaNette) * 100) / 100
+    const tvaNetteDue = Math.round(Math.max(0, tvaNette) * 100) / 100
     const totalAPayer = tvaNetteDue
 
     // Format period dates
@@ -316,13 +327,13 @@ export async function PUT(request: NextRequest) {
     const tvaDeductibleBiensServices = data.tvaDeductibleBiensServices ?? 0
     const tvaDeductibleImmobilisations = data.tvaDeductibleImmobilisations ?? 0
 
-    const totalTVABrute = tvaCollectee20 + tvaCollectee10 + tvaCollectee55 + tvaCollectee21
-    const totalBaseHT = baseHT20 + baseHT10 + baseHT55 + baseHT21
-    const totalTVADeductible = tvaDeductibleBiensServices + tvaDeductibleImmobilisations
+    const totalTVABrute = Math.round((tvaCollectee20 + tvaCollectee10 + tvaCollectee55 + tvaCollectee21) * 100) / 100
+    const totalBaseHT = Math.round((baseHT20 + baseHT10 + baseHT55 + baseHT21) * 100) / 100
+    const totalTVADeductible = Math.round((tvaDeductibleBiensServices + tvaDeductibleImmobilisations) * 100) / 100
     const totalDeductions = totalTVADeductible
-    const tvaNette = totalTVABrute - totalTVADeductible
-    const creditTVA = Math.max(0, -tvaNette)
-    const tvaNetteDue = Math.max(0, tvaNette)
+    const tvaNette = Math.round((totalTVABrute - totalTVADeductible) * 100) / 100
+    const creditTVA = Math.round(Math.max(0, -tvaNette) * 100) / 100
+    const tvaNetteDue = Math.round(Math.max(0, tvaNette) * 100) / 100
     const totalAPayer = tvaNetteDue
 
     const formulaire = await db.formulaire3517S.update({

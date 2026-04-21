@@ -287,6 +287,10 @@ model LiasseFiscale {
   fraisTelecom     Float    @default(0)
   fraisBancaires   Float    @default(0)
   cadeaux          Float    @default(0)
+  repasProfessionnels Float @default(0)
+  formation        Float    @default(0)
+  publiciteMarketing Float  @default(0)
+  expertComptable  Float    @default(0)
   
   // Immobilisations details
   materielsOutils  Float    @default(0)

@@ -14,8 +14,8 @@ export async function GET(request: NextRequest) {
     
     if (year) {
       const yearNum = parseInt(year)
-      const startDate = new Date(yearNum, 0, 1)
-      const endDate = new Date(yearNum, 11, 31)
+      const startDate = new Date(yearNum - 1, 11, 1) // Dec 1 of previous year (fiscal year)
+      const endDate = new Date(yearNum, 10, 30, 23, 59, 59, 999) // Nov 30 of target year (fiscal year)
       where.date = {
         gte: startDate,
         lte: endDate,
@@ -83,10 +83,9 @@ export async function GET(request: NextRequest) {
       .reduce((sum, t) => sum + t.amount, 0))
     
     const netResult = totalIncome - totalExpenses
-    const taxableIncome = netResult * 0.75 // Approximation after expenses
-    const estimatedIS = taxableIncome > 42500 
-      ? (42500 * 0.15) + ((taxableIncome - 42500) * 0.25)
-      : taxableIncome * 0.15
+    const estimatedIS = netResult > 0
+      ? (netResult <= 42500 ? netResult * 0.15 : (42500 * 0.15) + ((netResult - 42500) * 0.25))
+      : 0
 
     const summaryData = [
       { 'Rubrique': 'ENTREPRISE', 'Valeur': '', 'Montant': '' },
@@ -102,8 +101,7 @@ export async function GET(request: NextRequest) {
       { 'Rubrique': 'Dont déductibles', 'Valeur': '', 'Montant': deductibleExpenses },
       { 'Rubrique': '', 'Valeur': '', 'Montant': '' },
       { 'Rubrique': 'RÉSULTAT', 'Valeur': '', 'Montant': '' },
-      { 'Rubrique': 'Résultat net', 'Valeur': '', 'Montant': netResult },
-      { 'Rubrique': 'Base taxable estimée', 'Valeur': '', 'Montant': taxableIncome },
+      { 'Rubrique': 'Bénéfice net', 'Valeur': '', 'Montant': netResult },
       { 'Rubrique': '', 'Valeur': '', 'Montant': '' },
       { 'Rubrique': 'IMPÔT SOCIÉTÉS', 'Valeur': '', 'Montant': '' },
       { 'Rubrique': 'IS estimé', 'Valeur': '', 'Montant': Math.max(0, estimatedIS) },

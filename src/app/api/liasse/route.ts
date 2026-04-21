@@ -125,6 +125,7 @@ export async function POST(request: NextRequest) {
       fraisTelecom: 0,
       fraisBancaires: 0,
       cadeaux: 0,
+      repasProfessionnels: 0,
       publiciteMarketing: 0,
       formation: 0,
       expertComptable: 0,
@@ -135,83 +136,108 @@ export async function POST(request: NextRequest) {
     // Category breakdown for transparency
     const categoryBreakdown: Record<string, { count: number; total: number; field: string }> = {}
 
-    // Process each transaction
+    // Process each transaction - convert TTC to HT for liasse fiscale
     for (const t of transactions) {
       const catName = t.category?.name || 'Non catégorisé'
-      const amount = Math.abs(t.amount)
+      const amountTTC = Math.abs(t.amount)
+      // Convert TTC to HT using the category's default TVA rate
+      const tvaRate = t.category?.defaultTvaRate ?? 0.20
+      const amountHT = Math.round((amountTTC / (1 + tvaRate)) * 100) / 100
       
-      // Track category breakdown
+      // Track category breakdown (in HT)
       if (!categoryBreakdown[catName]) {
         categoryBreakdown[catName] = { count: 0, total: 0, field: 'unknown' }
       }
       categoryBreakdown[catName].count++
-      categoryBreakdown[catName].total += amount
+      categoryBreakdown[catName].total += amountHT
 
       if (t.type === 'income') {
-        liasseData.chiffreAffaires += amount
+        liasseData.chiffreAffaires += amountHT
         categoryBreakdown[catName].field = 'chiffreAffaires'
       } else if (t.type === 'expense') {
         const mapping = CATEGORY_TO_LIASSE[catName] || CATEGORY_TO_LIASSE['Non catégorisé']
         
         if (mapping && mapping.field !== 'nonDeductible') {
-          liasseData[mapping.field] = (liasseData[mapping.field] || 0) + amount
+          liasseData[mapping.field] = (liasseData[mapping.field] || 0) + amountHT
           categoryBreakdown[catName].field = mapping.field
         } else if (mapping?.field === 'nonDeductible') {
-          liasseData.nonDeductible += amount
+          liasseData.nonDeductible += amountHT
           categoryBreakdown[catName].field = 'nonDeductible (not included)'
         }
 
         // Track specific expense types for 2033-G
         const cat = catName.toLowerCase()
-        if (cat.includes('loyer')) liasseData.loyers += amount
-        if (cat.includes('assurance')) liasseData.primesAssurance += amount
-        if (cat.includes('déplacement') || cat.includes('transport')) liasseData.fraisDeplacement += amount
-        if (cat.includes('télécom') || cat.includes('téléphone') || cat.includes('internet')) liasseData.fraisTelecom += amount
-        if (cat.includes('bancaire')) liasseData.fraisBancaires += amount
-        if (cat.includes('repas') || cat.includes('restaurant')) liasseData.cadeaux += amount
-        if (cat.includes('publicité') || cat.includes('marketing')) liasseData.publiciteMarketing += amount
-        if (cat.includes('formation')) liasseData.formation += amount
-        if (cat.includes('comptable') || cat.includes('avocat') || cat.includes('honoraire')) liasseData.expertComptable += amount
-        if (cat.includes('rémunération') || cat.includes('salaire')) liasseData.remunerationGerant += amount
-        if (cat.includes('cotisation') || cat.includes('social')) liasseData.cotisationsSociales += amount
+        if (cat.includes('loyer')) liasseData.loyers += amountHT
+        if (cat.includes('assurance')) liasseData.primesAssurance += amountHT
+        if (cat.includes('déplacement') || cat.includes('transport')) liasseData.fraisDeplacement += amountHT
+        if (cat.includes('télécom') || cat.includes('téléphone') || cat.includes('internet')) liasseData.fraisTelecom += amountHT
+        if (cat.includes('bancaire')) liasseData.fraisBancaires += amountHT
+        if (cat.includes('repas') || cat.includes('restaurant')) liasseData.repasProfessionnels += amountHT
+        if (cat.includes('publicité') || cat.includes('marketing')) liasseData.publiciteMarketing += amountHT
+        if (cat.includes('formation')) liasseData.formation += amountHT
+        if (cat.includes('comptable') || cat.includes('avocat') || cat.includes('honoraire')) liasseData.expertComptable += amountHT
+        if (cat.includes('rémunération') || cat.includes('salaire')) liasseData.remunerationGerant += amountHT
+        if (cat.includes('cotisation') || cat.includes('social')) liasseData.cotisationsSociales += amountHT
       }
     }
 
-    // Calculate totals
-    const totalProduits = liasseData.chiffreAffaires + liasseData.autresProduits
-    const totalCharges = liasseData.achats + 
+    // Round all accumulated HT totals to avoid floating point errors
+    for (const key of Object.keys(liasseData)) {
+      liasseData[key] = Math.round(liasseData[key] * 100) / 100
+    }
+
+    // Calculate totals (all in HT)
+    const totalProduits = Math.round((liasseData.chiffreAffaires + liasseData.autresProduits) * 100) / 100
+    const totalCharges = Math.round((liasseData.achats + 
                         liasseData.servicesExterieurs + 
                         liasseData.chargesPersonnel + 
                         liasseData.impotsTaxes + 
                         liasseData.dotationsAmort + 
                         liasseData.chargesFinancieres + 
-                        liasseData.chargesExceptionnelles
+                        liasseData.chargesExceptionnelles) * 100) / 100
 
-    const resultatCourant = totalProduits - totalCharges
+    const resultatCourant = Math.round((totalProduits - totalCharges) * 100) / 100
 
-    // Calculate IS (Impôt sur les Sociétés)
+    // Look up previous year's liasse for deficit carry-forward
+    const previousLiasse = await db.liasseFiscale.findUnique({
+      where: { year: targetYear - 1 }
+    })
+    const deficitAnterieur = previousLiasse && previousLiasse.resultatNet < 0
+      ? Math.round(Math.abs(previousLiasse.resultatNet) * 100) / 100
+      : 0
+
+    // Calculate IS (Impôt sur les Sociétés) with deficit carry-forward
     let isAPayer = 0
-    const baseImposableIS = Math.max(0, resultatCourant)
+    let deficitUtilise = 0
+    const resultatAvantDeficit = Math.max(0, resultatCourant)
+    const baseImposableIS = Math.max(0, resultatAvantDeficit - deficitAnterieur)
     if (baseImposableIS > 0) {
-      if (baseImposableIS <= 42500) {
-        isAPayer = baseImposableIS * 0.15 // Taux réduit PME
+      if (resultatAvantDeficit <= 42500) {
+        // Entire result fits in reduced rate bracket
+        isAPayer = Math.round(baseImposableIS * 0.15 * 100) / 100 // Taux réduit PME
+      } else if (baseImposableIS <= 42500) {
+        isAPayer = Math.round(baseImposableIS * 0.15 * 100) / 100
       } else {
-        isAPayer = (42500 * 0.15) + ((baseImposableIS - 42500) * 0.25) // Taux standard au-delà
+        isAPayer = Math.round(((42500 * 0.15) + ((baseImposableIS - 42500) * 0.25)) * 100) / 100 // Taux standard au-delà
       }
+      deficitUtilise = Math.round((resultatAvantDeficit - baseImposableIS) * 100) / 100
+    } else if (deficitAnterieur > 0) {
+      // Full deficit absorbed, remaining deficit carries forward
+      deficitUtilise = Math.round(resultatAvantDeficit * 100) / 100
     }
 
-    const resultatNet = resultatCourant - isAPayer
+    const resultatNet = Math.round((resultatCourant - isAPayer) * 100) / 100
 
-    // Estimate cash position
-    const allTimeIncome = await db.transaction.aggregate({
-      where: { type: 'income' },
+    // Estimate cash position - fiscal year transactions only
+    const fiscalYearIncome = await db.transaction.aggregate({
+      where: { type: 'income', date: { gte: startDate, lte: endDate } },
       _sum: { amount: true }
     })
-    const allTimeExpenses = await db.transaction.aggregate({
-      where: { type: 'expense' },
+    const fiscalYearExpenses = await db.transaction.aggregate({
+      where: { type: 'expense', date: { gte: startDate, lte: endDate } },
       _sum: { amount: true }
     })
-    const disponibilites = (allTimeIncome._sum.amount || 0) - Math.abs(allTimeExpenses._sum.amount || 0)
+    const disponibilites = Math.round(((fiscalYearIncome._sum.amount || 0) - Math.abs(fiscalYearExpenses._sum.amount || 0)) * 100) / 100
 
     // Create or update liasse
     const liasse = await db.liasseFiscale.upsert({
@@ -280,6 +306,10 @@ export async function POST(request: NextRequest) {
         fraisTelecom: liasseData.fraisTelecom,
         fraisBancaires: liasseData.fraisBancaires,
         cadeaux: liasseData.cadeaux,
+        repasProfessionnels: liasseData.repasProfessionnels,
+        formation: liasseData.formation,
+        publiciteMarketing: liasseData.publiciteMarketing,
+        expertComptable: liasseData.expertComptable,
         materielsOutils: 0,
         materielsBureau: 0,
         materielsInfo: 0,
@@ -295,8 +325,8 @@ export async function POST(request: NextRequest) {
         retraitements: 0,
         resultatFiscal: resultatCourant,
         chargesDeductibles: 0,
-        deficitAnterieur: 0,
-        deficitUtilise: 0,
+        deficitAnterieur,
+        deficitUtilise,
         baseImposableIS,
         isAPayer,
       },
@@ -330,8 +360,14 @@ export async function POST(request: NextRequest) {
         fraisTelecom: liasseData.fraisTelecom,
         fraisBancaires: liasseData.fraisBancaires,
         cadeaux: liasseData.cadeaux,
+        repasProfessionnels: liasseData.repasProfessionnels,
+        formation: liasseData.formation,
+        publiciteMarketing: liasseData.publiciteMarketing,
+        expertComptable: liasseData.expertComptable,
         remunerationGerant: liasseData.remunerationGerant,
         cotisationsSociales: liasseData.cotisationsSociales,
+        deficitAnterieur,
+        deficitUtilise,
         baseImposableIS,
         isAPayer,
       }
@@ -354,6 +390,11 @@ export async function POST(request: NextRequest) {
         isAPayer,
         resultatNet,
         nonDeductible: liasseData.nonDeductible,
+        repasProfessionnels: liasseData.repasProfessionnels,
+        deficitAnterieur,
+        deficitUtilise,
+        baseImposableIS,
+        disponibilites,
       },
       categoryBreakdown,
     })

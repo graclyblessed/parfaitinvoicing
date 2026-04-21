@@ -867,15 +867,15 @@ function TaxDashboardContent() {
                         <span className="font-medium">37 500 €</span>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-muted-foreground">Votre CA actuel</span>
-                        <span className="font-medium text-emerald-600">{formatCurrency(totalIncome)}</span>
+                        <span className="text-muted-foreground">Votre CA actuel (HT)</span>
+                        <span className="font-medium text-emerald-600">{formatCurrency(totalIncome / 1.20)}</span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-muted-foreground">Marge restante</span>
-                        <span className="font-medium text-blue-600">{formatCurrency(Math.max(0, 37500 - totalIncome))}</span>
+                        <span className="font-medium text-blue-600">{formatCurrency(Math.max(0, 37500 - totalIncome / 1.20))}</span>
                       </div>
                     </div>
-                    <Progress value={(totalIncome / 37500) * 100} className="h-2" />
+                    <Progress value={Math.min(100, (totalIncome / 1.20 / 37500) * 100)} className="h-2" />
                   </div>
                 ) : (
                   <div className="space-y-4">
@@ -889,13 +889,13 @@ function TaxDashboardContent() {
                     <div className="grid grid-cols-2 gap-4">
                       <div className="p-3 bg-red-50 rounded-lg">
                         <p className="text-xs text-muted-foreground">TVA collectée (20%)</p>
-                        <p className="text-lg font-bold text-red-600">{formatCurrency(totalIncome * 0.20)}</p>
-                        <p className="text-xs text-muted-foreground mt-1">Sur {formatCurrency(totalIncome)} HT</p>
+                        <p className="text-lg font-bold text-red-600">{formatCurrency(totalIncome * 0.20 / 1.20)}</p>
+                        <p className="text-xs text-muted-foreground mt-1">Sur {formatCurrency(totalIncome / 1.20)} HT</p>
                       </div>
                       <div className="p-3 bg-green-50 rounded-lg">
                         <p className="text-xs text-muted-foreground">TVA déductible</p>
-                        <p className="text-lg font-bold text-green-600">{formatCurrency(totalExpenses * 0.20)}</p>
-                        <p className="text-xs text-muted-foreground mt-1">Sur {formatCurrency(totalExpenses)} HT</p>
+                        <p className="text-lg font-bold text-green-600">{formatCurrency(totalExpenses * 0.20 / 1.20)}</p>
+                        <p className="text-xs text-muted-foreground mt-1">Sur {formatCurrency(totalExpenses / 1.20)} HT</p>
                       </div>
                     </div>
                     
@@ -904,7 +904,7 @@ function TaxDashboardContent() {
                     <div className="flex justify-between items-center p-3 bg-muted rounded-lg">
                       <span className="text-sm font-medium">TVA nette à payer</span>
                       <span className="text-lg font-bold text-amber-600">
-                        {formatCurrency(Math.max(0, (totalIncome * 0.20) - (totalExpenses * 0.20)))}
+                        {formatCurrency(Math.max(0, (totalIncome * 0.20 / 1.20) - (totalExpenses * 0.20 / 1.20)))}
                       </span>
                     </div>
                     
@@ -944,14 +944,14 @@ function TaxDashboardContent() {
                 <div className="space-y-4">
                   <div className="grid grid-cols-2 gap-4">
                     <div className="p-3 bg-blue-50 rounded-lg">
-                      <p className="text-xs text-muted-foreground">Bénéfice fiscal</p>
+                      <p className="text-xs text-muted-foreground">Bénéfice fiscal (est. HT)</p>
                       <p className={`text-lg font-bold ${netProfit >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-                        {formatCurrency(netProfit)}
+                        {formatCurrency(netProfit / 1.20)}
                       </p>
                     </div>
                     <div className="p-3 bg-purple-50 rounded-lg">
-                      <p className="text-xs text-muted-foreground">IS estimé</p>
-                      <p className="text-lg font-bold text-purple-600">{formatCurrency(calculateIS(netProfit))}</p>
+                      <p className="text-xs text-muted-foreground">IS estimé (sur base HT)</p>
+                      <p className="text-lg font-bold text-purple-600">{formatCurrency(calculateIS(netProfit / 1.20))}</p>
                     </div>
                   </div>
                   
@@ -964,19 +964,19 @@ function TaxDashboardContent() {
                         <>
                           <div className="flex justify-between items-center p-2 bg-muted rounded">
                             <span>Acompte Q1 (15 mars)</span>
-                            <span className="font-mono">{formatCurrency(calculateIS(netProfit) / 4)}</span>
+                            <span className="font-mono">{formatCurrency(calculateIS(netProfit / 1.20) / 4)}</span>
                           </div>
                           <div className="flex justify-between items-center p-2 bg-muted rounded">
                             <span>Acompte Q2 (15 juin)</span>
-                            <span className="font-mono">{formatCurrency(calculateIS(netProfit) / 4)}</span>
+                            <span className="font-mono">{formatCurrency(calculateIS(netProfit / 1.20) / 4)}</span>
                           </div>
                           <div className="flex justify-between items-center p-2 bg-muted rounded">
                             <span>Acompte Q3 (15 sept.)</span>
-                            <span className="font-mono">{formatCurrency(calculateIS(netProfit) / 4)}</span>
+                            <span className="font-mono">{formatCurrency(calculateIS(netProfit / 1.20) / 4)}</span>
                           </div>
                           <div className="flex justify-between items-center p-2 bg-muted rounded">
                             <span>Acompte Q4 (15 déc.)</span>
-                            <span className="font-mono">{formatCurrency(calculateIS(netProfit) / 4)}</span>
+                            <span className="font-mono">{formatCurrency(calculateIS(netProfit / 1.20) / 4)}</span>
                           </div>
                         </>
                       )}

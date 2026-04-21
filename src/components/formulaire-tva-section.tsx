@@ -100,25 +100,41 @@ export function FormulaireTVASection({ settings }: FormulaireTVASectionProps) {
     fetchForms()
   }, [])
 
+  // Load the form matching the current selectedYear from the list
+  const loadFormForYear = (forms: Formulaire3517S[], year: number) => {
+    const match = forms.find(f => f.year === year)
+    if (match) {
+      setForm(match)
+      setManualInputs({
+        tvaDeductibleBiensServices: match.tvaDeductibleBiensServices,
+        tvaDeductibleImmobilisations: match.tvaDeductibleImmobilisations,
+      })
+    } else {
+      setForm(null)
+      setManualInputs({ tvaDeductibleBiensServices: 0, tvaDeductibleImmobilisations: 0 })
+    }
+  }
+
   const fetchForms = async () => {
     setLoading(true)
     try {
       const res = await fetch('/api/formulaire-3517s')
       const data = await res.json()
-      setFormList(data.formulaires || [])
-      if (data.formulaires?.length > 0) {
-        setForm(data.formulaires[0])
-        setSelectedYear(data.formulaires[0].year)
-        setManualInputs({
-          tvaDeductibleBiensServices: data.formulaires[0].tvaDeductibleBiensServices,
-          tvaDeductibleImmobilisations: data.formulaires[0].tvaDeductibleImmobilisations,
-        })
-      }
+      const forms = data.formulaires || []
+      setFormList(forms)
+      // Load the form for the currently selected year (not always the first!)
+      loadFormForYear(forms, selectedYear)
     } catch (error) {
       console.error('Error fetching forms:', error)
     } finally {
       setLoading(false)
     }
+  }
+
+  // When year changes, load the matching form from the cached list
+  const handleYearChange = (year: number) => {
+    setSelectedYear(year)
+    loadFormForYear(formList, year)
   }
 
   const generate = async () => {
@@ -132,7 +148,12 @@ export function FormulaireTVASection({ settings }: FormulaireTVASectionProps) {
       const data = await res.json()
       if (data.success) {
         setForm(data.formulaire)
-        fetchForms()
+        // Refresh list but keep displaying the generated form
+        try {
+          const listRes = await fetch('/api/formulaire-3517s')
+          const listData = await listRes.json()
+          setFormList(listData.formulaires || [])
+        } catch { /* ignore list refresh error */ }
         
         // Show detailed breakdown
         const s = data.summary
@@ -381,7 +402,7 @@ export function FormulaireTVASection({ settings }: FormulaireTVASectionProps) {
               <select
                 className="p-2 border rounded-md bg-white"
                 value={selectedYear}
-                onChange={(e) => setSelectedYear(parseInt(e.target.value))}
+                onChange={(e) => handleYearChange(parseInt(e.target.value))}
               >
                 {yearOptions.map(y => (
                   <option key={y} value={y}>30/11/{y}</option>

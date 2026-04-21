@@ -182,6 +182,14 @@ export function FormulaireISSection({ settings, transactions }: FormulaireISSect
     fetchForms()
   }, [])
 
+  // Load the form matching the current selectedYear from the list
+  const loadFormsForYear = (list2572: Formulaire2572[], list2065: Formulaire2065[], year: number) => {
+    const match2572 = list2572.find(f => f.year === year)
+    setForm2572(match2572 || null)
+    const match2065 = list2065.find(f => f.year === year)
+    setForm2065(match2065 || null)
+  }
+
   const fetchForms = async () => {
     setLoading(true)
     try {
@@ -191,20 +199,23 @@ export function FormulaireISSection({ settings, transactions }: FormulaireISSect
       ])
       const data2572 = await res2572.json()
       const data2065 = await res2065.json()
-      setForm2572List(data2572.formulaires || [])
-      setForm2065List(data2065.formulaires || [])
-      if (data2572.formulaires?.length > 0) {
-        setForm2572(data2572.formulaires[0])
-        setSelectedYear(data2572.formulaires[0].year)
-      }
-      if (data2065.formulaires?.length > 0) {
-        setForm2065(data2065.formulaires[0])
-      }
+      const list2572 = data2572.formulaires || []
+      const list2065 = data2065.formulaires || []
+      setForm2572List(list2572)
+      setForm2065List(list2065)
+      // Load the form for the currently selected year (not always the first!)
+      loadFormsForYear(list2572, list2065, selectedYear)
     } catch (error) {
       console.error('Error fetching forms:', error)
     } finally {
       setLoading(false)
     }
+  }
+
+  // When year changes, load the matching forms from the cached lists
+  const handleYearChange = (year: number) => {
+    setSelectedYear(year)
+    loadFormsForYear(form2572List, form2065List, year)
   }
 
   const generate2572 = async () => {
@@ -218,7 +229,12 @@ export function FormulaireISSection({ settings, transactions }: FormulaireISSect
       const data = await res.json()
       if (data.success) {
         setForm2572(data.formulaire)
-        fetchForms()
+        // Refresh list but keep displaying the generated form
+        try {
+          const listRes = await fetch('/api/formulaire-2572')
+          const listData = await listRes.json()
+          setForm2572List(listData.formulaires || [])
+        } catch { /* ignore */ }
         toast.success(`Formulaire 2572 généré pour l'exercice ${selectedYear}!`)
       } else {
         toast.error('Erreur: ' + (data.error || 'Erreur inconnue'))
@@ -242,7 +258,12 @@ export function FormulaireISSection({ settings, transactions }: FormulaireISSect
       const data = await res.json()
       if (data.success) {
         setForm2065(data.formulaire)
-        fetchForms()
+        // Refresh list but keep displaying the generated form
+        try {
+          const listRes = await fetch('/api/formulaire-2065')
+          const listData = await listRes.json()
+          setForm2065List(listData.formulaires || [])
+        } catch { /* ignore */ }
         toast.success(`Formulaire 2065 généré pour l'exercice ${selectedYear}!`)
       } else {
         toast.error('Erreur: ' + (data.error || 'Erreur inconnue'))
@@ -582,7 +603,7 @@ export function FormulaireISSection({ settings, transactions }: FormulaireISSect
               <select
                 className="p-2 border rounded-md bg-white"
                 value={selectedYear}
-                onChange={(e) => setSelectedYear(parseInt(e.target.value))}
+                onChange={(e) => handleYearChange(parseInt(e.target.value))}
               >
                 {yearOptions.map(y => (
                   <option key={y} value={y}>30/11/{y}</option>

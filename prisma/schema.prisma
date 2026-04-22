@@ -117,6 +117,7 @@ model Transaction {
   receiptUrl      String?  // Path to uploaded receipt
   receiptName     String?  // Original receipt filename
   notes           String?  // User notes
+  taxPayments     TaxPayment[] // Tax payments linked to this transaction
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 }
@@ -553,5 +554,48 @@ model Declaration {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
   
+  // Tax payments linked to this declaration
+  taxPayments     TaxPayment[]
+
   @@unique([type, year, period])
+}
+
+// Tax Payment - records actual payments made to tax authorities (impots.gouv.fr)
+model TaxPayment {
+  id              String   @id @default(cuid())
+  
+  // What tax was paid
+  taxType         String   // IS, TVA, CFE, TVS, CVA, DAS2, CIR, CII, OTHER
+  declarationId   String?  // Link to Declaration if created from a declaration
+  declaration     Declaration? @relation(fields: [declarationId], references: [id], onDelete: SetNull)
+  
+  // Fiscal year and period
+  year            Int      // Fiscal year the payment relates to
+  period          String   // e.g., "IS-Q1-2025", "CA12-2025", "CFE-2025", "TVA-Accompte-Juillet-2025"
+  label           String   // Free text label e.g. "Acompte IS Q1 2025", "TVA CA12 2024", "CFE 2025"
+  
+  // Payment details
+  amount          Float    // Amount actually paid
+  paymentDate     DateTime // Date payment was made
+  dueDate         DateTime? // Original due date (for late payment tracking)
+  paymentMethod   String?  // "telepaiement", "virement", "prelevement", "cheque", "autre"
+  reference       String?  // impots.gouv.fr reference / télé-règlement number
+  status          String   @default("completed") // "completed", "pending", "cancelled", "adjusted"
+  
+  // Bank reconciliation
+  transactionId   String?  // Link to matching bank Transaction
+  transaction     Transaction? @relation(fields: [transactionId], references: [id], onDelete: SetNull)
+  
+  // Proof & notes
+  receiptUrl      String?  // Uploaded receipt/screenshot from impots.gouv.fr
+  notes           String?
+  
+  // Metadata
+  isHistorical    Boolean  @default(false) // true if entered after the fact (prior period)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  @@index([taxType, year])
+  @@index([paymentDate])
+  @@index([declarationId])
 }

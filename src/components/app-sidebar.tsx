@@ -20,6 +20,7 @@ import {
   FileCheck,
   Receipt,
   ClipboardList,
+  Banknote,
 } from 'lucide-react'
 import {
   Sidebar,
@@ -56,6 +57,7 @@ const navigation = [
       { name: 'Formulaires IS', href: '/?tab=formulaire-is', icon: FileCheck, tab: 'formulaire-is' },
       { name: 'TVA (CA3/3517-S)', href: '/?tab=formulaire-tva', icon: Receipt, tab: 'formulaire-tva' },
       { name: 'Déclarations', href: '/?tab=declarations', icon: ClipboardList, tab: 'declarations' },
+      { name: 'Paiements d\'impôts', href: '/?tab=tax-payments', icon: Banknote, tab: 'tax-payments' },
     ],
   },
   {

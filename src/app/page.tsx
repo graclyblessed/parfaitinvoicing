@@ -27,6 +27,7 @@ import { LiasseFiscaleSection } from '@/components/liasse-fiscale-section'
 import { DeclarationsSection } from '@/components/declarations-section'
 import { FormulaireISSection } from '@/components/formulaire-is-section'
 import { FormulaireTVASection } from '@/components/formulaire-tva-section'
+import { TaxPaymentsSection } from '@/components/tax-payments-section'
 import { DevisSection } from '@/components/devis-section'
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from '@/components/ui/chart'
 import { Bar, BarChart, XAxis, YAxis, CartesianGrid, Line, LineChart as RechartsLineChart, ResponsiveContainer, Area, AreaChart } from 'recharts'
@@ -680,6 +681,10 @@ function TaxDashboardContent() {
           <TabsTrigger value="formulaire-is">Formulaires IS</TabsTrigger>
           <TabsTrigger value="formulaire-tva">TVA (3517-S)</TabsTrigger>
           <TabsTrigger value="declarations">Déclarations</TabsTrigger>
+          <TabsTrigger value="tax-payments">
+            <Receipt className="h-4 w-4 mr-1.5" />
+            Paiements
+          </TabsTrigger>
           <TabsTrigger value="settings">Paramètres</TabsTrigger>
         </TabsList>
 
@@ -1885,6 +1890,11 @@ function TaxDashboardContent() {
         {/* Declarations Tab - TVA & IS */}
         <TabsContent value="declarations" className="space-y-6">
           <DeclarationsSection settings={settings} />
+        </TabsContent>
+
+        {/* Tax Payments Tab */}
+        <TabsContent value="tax-payments" className="space-y-6">
+          <TaxPaymentsSection settings={settings} />
         </TabsContent>
 
         {/* Settings Tab */}

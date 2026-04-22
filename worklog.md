@@ -128,3 +128,24 @@ Stage Summary:
 - API route now validates inputs and provides clear French error messages
 - Frontend shows actionable guidance when errors occur
 - Vercel deployment triggered to sync database schema
+
+---
+Task ID: tax-payment-tracking
+Agent: main
+Task: Implement professional tax payment tracking system
+
+Work Log:
+- Added TaxPayment Prisma model with comprehensive fields (taxType, year, period, label, amount, paymentDate, dueDate, paymentMethod, reference, status, transactionId, receiptUrl, notes, isHistorical)
+- Added reverse relation taxPayments[] to Declaration and Transaction models
+- Created /api/tax-payments/route.ts with GET (list with filters), POST (create with duplicate detection), PUT (update with declaration status management), DELETE
+- Fixed Form 2065 POST handler: replaced hardcoded acomptesVerses=0 with actual TaxPayment IS sum query
+- Created tax-payments-section.tsx component with 3 tabs: Enregistrer un paiement (form), Historique (table), Rapprochement bancaire (bank matching)
+- Integrated TaxPaymentsSection into page.tsx as new tab "Paiements" with Receipt icon
+- Added "Paiements d'impôts" sidebar navigation item with Banknote icon
+- Ran prisma generate (v6.19.2) successfully
+- Ran bun run lint - no errors
+
+Stage Summary:
+- Full tax payment tracking system implemented with QuickBooks-style prior payment support
+- Form 2065 now dynamically calculates acomptesVerses from actual IS payments
+- All UI text in French, matching existing codebase patterns

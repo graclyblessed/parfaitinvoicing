@@ -161,9 +161,21 @@ export async function POST(request: NextRequest) {
     const revenusBrevets = 0
     const revenusPatrimoineMobilier = 0
 
-    // Precompte and acomptes
+    // Fetch actual IS payments for this fiscal year (acomptes paid during the year)
+    const isPayments = await db.taxPayment.findMany({
+      where: {
+        taxType: 'IS',
+        year: targetYear,
+        status: 'completed',
+        paymentDate: {
+          gte: startDate,
+          lte: endDate
+        }
+      }
+    })
+
+    const acomptesVerses = Math.round(isPayments.reduce((sum, p) => sum + p.amount, 0) * 100) / 100
     const precompteIS = 0
-    const acomptesVerses = 0
 
     // Date cloture
     const dateCloture = `30/11/${targetYear}`

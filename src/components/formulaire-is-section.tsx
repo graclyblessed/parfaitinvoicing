@@ -12,7 +12,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import {
-  FileText, Download, Loader2, Calculator, Building2, Euro,
+  FileText, Loader2, Calculator, Building2,
   AlertCircle, CheckCircle, Info, Copy, Check, Clipboard,
   ExternalLink, RefreshCw, Save, HelpCircle
 } from 'lucide-react'

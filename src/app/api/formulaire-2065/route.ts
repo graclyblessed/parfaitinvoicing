@@ -73,7 +73,11 @@ export async function POST(request: NextRequest) {
 
     for (const t of transactions) {
       const amountTTC = Math.abs(t.amount)
-      const rate = t.category?.defaultTvaRate ?? 0.20
+      // BUG FIX: Use category TVA rate for income (default 0.20), but 0 for expenses
+      // (expenses should only have TVA removed if the category actually has a TVA rate)
+      const rate = t.type === 'income'
+        ? (t.category?.defaultTvaRate ?? 0.20)
+        : (t.category?.defaultTvaRate ?? 0)
       const amountHT = Math.round((amountTTC / (1 + rate)) * 100) / 100
 
       if (t.type === 'income') {
@@ -121,12 +125,12 @@ export async function POST(request: NextRequest) {
     // Base imposable = max(0, baseImposableAvant - deficitUtilise)
     const baseImposable = Math.max(0, baseImposableAvant - deficitUtilise)
 
-    // IS Calculation split
+    // IS Calculation split (with centime rounding)
     const baseTauxReduit = Math.min(42500, baseImposable)
     const baseTauxNormal = Math.max(0, baseImposable - 42500)
-    const isTauxReduit = baseTauxReduit * 0.15
-    const isTauxNormal = baseTauxNormal * 0.25
-    const isTotal = isTauxReduit + isTauxNormal
+    const isTauxReduit = Math.round(baseTauxReduit * 0.15 * 100) / 100
+    const isTauxNormal = Math.round(baseTauxNormal * 0.25 * 100) / 100
+    const isTotal = Math.round((isTauxReduit + isTauxNormal) * 100) / 100
 
     // Credits d'impôt
     const creditImpotRecherche = credits.creditImpotRecherche || 0
@@ -357,12 +361,12 @@ export async function PUT(request: NextRequest) {
     const baseImposableAvant = resultatFiscal
     const baseImposable = Math.max(0, baseImposableAvant - deficitUtilise)
 
-    // Recalculate IS split
+    // Recalculate IS split (with centime rounding)
     const baseTauxReduit = Math.min(42500, baseImposable)
     const baseTauxNormal = Math.max(0, baseImposable - 42500)
-    const isTauxReduit = baseTauxReduit * 0.15
-    const isTauxNormal = baseTauxNormal * 0.25
-    const isTotal = isTauxReduit + isTauxNormal
+    const isTauxReduit = Math.round(baseTauxReduit * 0.15 * 100) / 100
+    const isTauxNormal = Math.round(baseTauxNormal * 0.25 * 100) / 100
+    const isTotal = Math.round((isTauxReduit + isTauxNormal) * 100) / 100
 
     // Recalculate total credits
     const totalCreditsImpot =

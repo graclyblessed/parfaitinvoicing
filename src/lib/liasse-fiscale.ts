@@ -76,8 +76,8 @@ export interface CompteResultat {
   servicesExterieurs: number           // 012 (rent, utilities, insurance)
   chargesPersonnel: number             // 013 (salaries if any)
   impotsTaxes: number                  // 014 (CFE, etc.)
-  dotationsAmortissements: number      // 015
-  dotationsProvisions: number          // 016
+  dotationsAmort: number                    // 015
+  dotationsProvisions: number              // 016
   chargesFinancieres: number           // 017 (interest)
   chargesExceptionnelles: number       // 018
   totalCharges: number                 // 019
@@ -154,13 +154,13 @@ export function calculateIS(baseImposable: number): number {
   const PLAFOND = 42500
   
   if (baseImposable <= PLAFOND) {
-    return baseImposable * TAUX_REDUIT
+    return Math.round(baseImposable * TAUX_REDUIT * 100) / 100
   }
   
   const partReduite = PLAFOND * TAUX_REDUIT
   const partNormale = (baseImposable - PLAFOND) * TAUX_NORMAL
   
-  return partReduite + partNormale
+  return Math.round((partReduite + partNormale) * 100) / 100
 }
 
 // Calculate totals from raw data
@@ -234,14 +234,14 @@ export function calculateCompteResultatTotals(compte: Partial<CompteResultat>): 
   const servicesExterieurs = compte.servicesExterieurs || 0
   const chargesPersonnel = compte.chargesPersonnel || 0
   const impotsTaxes = compte.impotsTaxes || 0
-  const dotationsAmortissements = compte.dotationsAmortissements || 0
+  const dotationsAmort = compte.dotationsAmort || 0
   const dotationsProvisions = compte.dotationsProvisions || 0
   const chargesFinancieres = compte.chargesFinancieres || 0
   const chargesExceptionnelles = compte.chargesExceptionnelles || 0
   
   const totalProduits = chiffreAffaires + productionStockee + productionImmobilisee + subventions + autresProduits
   const totalCharges = achats + variationStocks + servicesExterieurs + chargesPersonnel + 
-                       impotsTaxes + dotationsAmortissements + dotationsProvisions + 
+                       impotsTaxes + dotationsAmort + dotationsProvisions + 
                        chargesFinancieres + chargesExceptionnelles
   
   const resultatCourant = totalProduits - totalCharges
@@ -262,7 +262,7 @@ export function calculateCompteResultatTotals(compte: Partial<CompteResultat>): 
     servicesExterieurs,
     chargesPersonnel,
     impotsTaxes,
-    dotationsAmortissements,
+    dotationsAmort,
     dotationsProvisions,
     chargesFinancieres,
     chargesExceptionnelles,
@@ -343,11 +343,10 @@ export function generateLiasseFromTransactions(
     status: 'draft',
     compteResultat,
     actif: calculateActifTotals({
-      capital: settings.capital || 0,
       disponibilites: chiffreAffaires - (achats + servicesExterieurs + impotsTaxes),
     }),
     passif: calculatePassifTotals({
-      capital: settings.capital || 1000, // Default minimum capital
+      capital: settings.capital || 0,
       resultatExercice: compteResultat.resultatNet,
     }),
     informations: {

@@ -133,6 +133,7 @@ export async function POST(request: NextRequest) {
       chargesPersonnel: 0,
       impotsTaxes: 0,
       dotationsAmort: 0,
+      dotationsProvisions: 0,
       chargesFinancieres: 0,
       chargesExceptionnelles: 0,
       autresCharges: 0,

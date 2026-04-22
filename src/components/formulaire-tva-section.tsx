@@ -13,7 +13,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import {
-  FileText, Download, Loader2, Calculator, Building2, Euro,
+  FileText, Loader2, Calculator,
   AlertCircle, CheckCircle, Info, Copy, Check, Clipboard,
   ExternalLink, Save, HelpCircle, Percent, ChevronDown
 } from 'lucide-react'

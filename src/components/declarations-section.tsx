@@ -11,8 +11,8 @@ import { Separator } from '@/components/ui/separator'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
-  FileText, Download, Loader2, Calculator, Building2, TrendingUp, TrendingDown, Euro,
-  AlertCircle, CheckCircle, Info, Calendar, Upload, Paperclip, X, Eye
+  FileText, Loader2, Calculator,
+  CheckCircle, Info, Calendar, Paperclip, X, Eye
 } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -68,13 +68,13 @@ function getTVACA12Date(fyEndYear: number): Date {
   return new Date(fyEndYear + 1, 4, 3) // May 3rd of following year
 }
 
-// Calculate IS based on profit
+// Calculate IS based on profit (with centime rounding)
 function calculateIS(profit: number): number {
   if (profit <= 0) return 0
   if (profit <= 42500) {
-    return profit * 0.15
+    return Math.round(profit * 0.15 * 100) / 100
   }
-  return (42500 * 0.15) + ((profit - 42500) * 0.25)
+  return Math.round((42500 * 0.15 + (profit - 42500) * 0.25) * 100) / 100
 }
 
 export function DeclarationsSection({ settings }: DeclarationsSectionProps) {
@@ -147,15 +147,15 @@ export function DeclarationsSection({ settings }: DeclarationsSectionProps) {
 
         if (t.amount > 0) {
           fyData[fy].income += t.amount
-          // Income TVA: use category rate with TTC formula
+          // Income TVA: use category rate with TTC formula (default 0.20 for income)
           const inRate = t.category?.defaultTvaRate ?? 0.20
           if (inRate > 0) {
             fyData[fy].tvaCollectee += t.amount * inRate / (1 + inRate)
           }
         } else {
           fyData[fy].expenses += Math.abs(t.amount)
-          // Expense TVA déductible: use category rate with TTC formula
-          const expRate = t.category?.defaultTvaRate ?? 0.20
+          // Expense TVA déductible: use category rate (default 0 for expenses)
+          const expRate = t.category?.defaultTvaRate ?? 0
           const isDeductible = t.category?.taxDeductible ?? true
           if (isDeductible && expRate > 0) {
             fyData[fy].tvaDeductible += Math.abs(t.amount) * expRate / (1 + expRate)

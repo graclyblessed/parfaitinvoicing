@@ -621,7 +621,12 @@ function TaxDashboardContent() {
   const exportToExcel = async () => {
     setExporting(true)
     try {
-      const year = new Date().getFullYear()
+      const year = selectedFiscalYear || new Date().getFullYear()
+      if (!selectedFiscalYear) {
+        toast.error('Veuillez sélectionner un exercice fiscal avant d\'exporter')
+        setExporting(false)
+        return
+      }
       const res = await fetch(`/api/export?year=${year}`)
       const blob = await res.blob()
       const url = window.URL.createObjectURL(blob)
@@ -947,6 +952,7 @@ function TaxDashboardContent() {
                         <span className="text-sm">Déclaration CA12</span>
                         <Badge variant="outline" className="bg-amber-100">
                           {(() => {
+                            if (!selectedFiscalYear) return 'Sélectionnez un exercice'
                             const now = new Date()
                             const fyEnd = selectedFiscalYear
                             // CA12 is due May 3rd of the year after fiscal year end
@@ -957,7 +963,7 @@ function TaxDashboardContent() {
                         </Badge>
                       </div>
                       <p className="text-xs text-muted-foreground">
-                        La déclaration CA12 couvre l'année civile précédente et doit être déposée avant le 3 mai.
+                        La déclaration CA12 couvre l'exercice fiscal et doit être déposée avant le 3 mai.
                       </p>
                     </div>
                   </div>

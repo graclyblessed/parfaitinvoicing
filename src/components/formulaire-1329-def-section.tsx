@@ -40,8 +40,14 @@ import {
   Euro,
   Sparkles,
   RefreshCw,
-  Edit3,
+  Copy,
+  Check,
+  PencilLine,
   Lock,
+  FileSearch,
+  Receipt,
+  Building2,
+  ArrowRight,
 } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -118,19 +124,20 @@ export function Formulaire1329DEFSection({ settings }: Formulaire1329DEFSectionP
   const [data, setData] = useState<Data | null>(null)
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [copiedLine, setCopiedLine] = useState<string | null>(null)
 
-  // À SAISIR fields (only 5 real inputs per the official guide)
-  const [caHT, setCaHT] = useState('')          // Ligne 01
-  const [va, setVa] = useState('')              // Ligne 05
-  const [acomptesCVAE, setAcomptesCVAE] = useState('')      // Ligne 12
-  const [acomptesTaxeAdd, setAcomptesTaxeAdd] = useState('') // Ligne 16
-  const [acompteContrib, setAcompteContrib] = useState('')   // Ligne 21
-  // Optional fields
+  // À SAISIR fields
+  const [caHT, setCaHT] = useState('')
+  const [va, setVa] = useState('')
+  const [acomptesCVAE, setAcomptesCVAE] = useState('')
+  const [acomptesTaxeAdd, setAcomptesTaxeAdd] = useState('')
+  const [acompteContrib, setAcompteContrib] = useState('')
+  // Optional
   const [effectifs, setEffectifs] = useState(0)
   const [cessation, setCessation] = useState(false)
   const [limitationVA, setLimitationVA] = useState(false)
   const [exonereTaxeAdd, setExonereTaxeAdd] = useState(false)
-  const [exonerations, setExonerations] = useState('')  // Ligne 09 (rare)
+  const [exonerations, setExonerations] = useState('')
   const [reference, setReference] = useState('')
   const [filedAt, setFiledAt] = useState(new Date().toISOString().split('T')[0])
   const [autoFilled, setAutoFilled] = useState(true)
@@ -142,15 +149,10 @@ export function Formulaire1329DEFSection({ settings }: Formulaire1329DEFSectionP
       if (!res.ok) throw new Error('Erreur API')
       const d: Data = await res.json()
       setData(d)
-
       const autoCA = d.autoCalc?.chiffreAffaires ?? 0
       const autoVA = d.autoCalc?.valeurAjoutee ?? 0
-      const savedCA = d.inputs.caHT ?? 0
-      const savedVA = d.inputs.valeurAjoutee ?? 0
-
-      const useCA = d.form ? savedCA : autoCA
-      const useVA = d.form ? savedVA : autoVA
-
+      const useCA = d.form ? (d.inputs.caHT ?? 0) : autoCA
+      const useVA = d.form ? (d.inputs.valeurAjoutee ?? 0) : autoVA
       setCaHT(useCA ? useCA.toString() : '')
       setVa(useVA ? useVA.toString() : '')
       setAutoFilled(!d.form)
@@ -163,11 +165,7 @@ export function Formulaire1329DEFSection({ settings }: Formulaire1329DEFSectionP
       setExonereTaxeAdd(d.inputs.exonereTaxeAdditionnelle || false)
       setExonerations(d.inputs.exonerations?.toString() || '')
       setReference(d.form?.reference || '')
-      setFiledAt(
-        d.form?.filedAt
-          ? d.form.filedAt.split('T')[0]
-          : new Date().toISOString().split('T')[0]
-      )
+      setFiledAt(d.form?.filedAt ? d.form.filedAt.split('T')[0] : new Date().toISOString().split('T')[0])
     } catch (e) {
       console.error(e)
       toast.error('Impossible de charger le formulaire 1329-DEF')
@@ -182,11 +180,20 @@ export function Formulaire1329DEFSection({ settings }: Formulaire1329DEFSectionP
 
   const fmt = (n: number) =>
     new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(n || 0)
-
-  const fmtDate = (s: string) =>
-    new Date(s).toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' })
-
+  const fmtPlain = (n: number) => new Intl.NumberFormat('fr-FR', { minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(n || 0)
+  const fmtDate = (s: string) => new Date(s).toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' })
   const num = (s: string) => (s === '' || isNaN(parseFloat(s)) ? 0 : parseFloat(s))
+
+  const copyValue = async (line: string, value: number | string) => {
+    try {
+      await navigator.clipboard.writeText(String(value))
+      setCopiedLine(line)
+      toast.success(`Ligne ${line} copiée : ${value}`)
+      setTimeout(() => setCopiedLine(null), 2000)
+    } catch {
+      toast.error('Copie impossible')
+    }
+  }
 
   const recalcFromTransactions = () => {
     if (data?.autoCalc) {
@@ -214,110 +221,122 @@ export function Formulaire1329DEFSection({ settings }: Formulaire1329DEFSectionP
           year,
           action,
           inputs: {
-            caHT: num(caHT),
-            valeurAjoutee: num(va),
-            effectifsSalaries: effectifs,
-            cessation2026: cessation,
-            limitationVANonApplicable: limitationVA,
-            exonereTaxeAdditionnelle: exonereTaxeAdd,
-            exonerations: num(exonerations),
-            acomptesCVAE: num(acomptesCVAE),
-            acomptesTaxeAdd: num(acomptesTaxeAdd),
+            caHT: num(caHT), valeurAjoutee: num(va), effectifsSalaries: effectifs,
+            cessation2026: cessation, limitationVANonApplicable: limitationVA,
+            exonereTaxeAdditionnelle: exonereTaxeAdd, exonerations: num(exonerations),
+            acomptesCVAE: num(acomptesCVAE), acomptesTaxeAdd: num(acomptesTaxeAdd),
             acompteContribCompl: num(acompteContrib),
           },
-          reference: reference.trim(),
-          filedAt,
+          reference: reference.trim(), filedAt,
         }),
       })
       const d = await res.json()
-      if (d.success) {
-        toast.success(d.message)
-        fetchData()
-      } else {
-        toast.error(d.error || 'Erreur')
-      }
-    } catch (e) {
-      console.error(e)
-      toast.error('Erreur réseau')
-    } finally {
-      setSaving(false)
-    }
+      if (d.success) { toast.success(d.message); fetchData() }
+      else toast.error(d.error || 'Erreur')
+    } catch (e) { console.error(e); toast.error('Erreur réseau') }
+    finally { setSaving(false) }
   }
 
   const isFiled = data?.form?.status === 'filed'
   const calc = data?.calculation
   const overdue = data?.deadline?.isOverdue
   const autoCalc = data?.autoCalc
+  const caNum = num(caHT)
+  const isEligible = caNum > 500000
+  const mustFile = caNum > 152500
 
-  // Line component: distinguishes "À SAISIR" (input) vs "Auto" (calculated)
-  const Line = ({
-    num: n,
+  // Field row component — mirrors the PDF structure
+  // "type" controls the visual: 'saisir' = you type it, 'auto' = impots.gouv.fr calculates it
+  const FormLine = ({
+    line,
     label,
     value,
-    formula,
-    input,
-    isInput,
-    bold,
-    note,
+    type, // 'saisir' | 'auto'
+    where,
+    children,
+    highlight,
   }: {
-    num: string
+    line: string
     label: string
     value?: number
-    formula?: string
-    input?: React.ReactNode
-    isInput?: boolean
-    bold?: boolean
-    note?: string
-  }) => (
-    <div className={`flex items-center gap-3 py-2 px-3 ${bold ? 'bg-muted/50 font-semibold' : ''} border-b border-border/50 last:border-0`}>
-      <div className="flex-shrink-0 w-8 h-8 rounded bg-primary/10 text-primary text-xs font-bold flex items-center justify-center">
-        {n}
-      </div>
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2">
-          <p className="text-sm">{label}</p>
-          {isInput ? (
-            <Badge variant="outline" className="text-[10px] py-0 px-1 bg-blue-50 text-blue-700 border-blue-300">
-              <Edit3 className="h-2.5 w-2.5 mr-0.5" />À saisir
-            </Badge>
-          ) : (
-            <Badge variant="outline" className="text-[10px] py-0 px-1 bg-slate-50 text-slate-500 border-slate-300">
-              <Lock className="h-2.5 w-2.5 mr-0.5" />Auto
-            </Badge>
+    type: 'saisir' | 'auto'
+    where?: string
+    children?: React.ReactNode
+    highlight?: 'result' | 'zero'
+  }) => {
+    const isCopied = copiedLine === line
+    return (
+      <div className={`border rounded-lg p-4 transition-all ${
+        type === 'saisir' ? 'border-blue-300 bg-blue-50/30' : 'border-border bg-card'
+      } ${highlight === 'result' ? 'ring-2 ring-rose-300 border-rose-300' : ''} ${highlight === 'zero' ? 'opacity-60' : ''}`}>
+        <div className="flex items-start gap-3">
+          {/* Line number badge */}
+          <div className={`flex-shrink-0 w-10 h-10 rounded-lg flex items-center justify-center font-bold text-sm ${
+            type === 'saisir' ? 'bg-blue-500 text-white' : 'bg-muted text-muted-foreground'
+          }`}>
+            {line}
+          </div>
+          {/* Label + where to find */}
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <p className="text-sm font-medium">{label}</p>
+              {type === 'saisir' ? (
+                <Badge variant="outline" className="text-[10px] bg-blue-100 text-blue-700 border-blue-400">
+                  <PencilLine className="h-3 w-3 mr-0.5" />À SAISIR
+                </Badge>
+              ) : (
+                <Badge variant="outline" className="text-[10px] bg-slate-100 text-slate-500 border-slate-300">
+                  <Lock className="h-3 w-3 mr-0.5" />AUTO sur impots.gouv.fr
+                </Badge>
+              )}
+            </div>
+            {where && (
+              <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
+                <FileSearch className="h-3 w-3" />
+                {where}
+              </p>
+            )}
+            {children && <div className="mt-2">{children}</div>}
+          </div>
+          {/* Value + copy button (only for auto fields or computed) */}
+          {value !== undefined && (
+            <div className="flex-shrink-0 flex items-center gap-2">
+              <div className="text-right">
+                <p className={`font-mono font-bold ${highlight === 'result' ? 'text-2xl text-rose-600' : 'text-lg'}`}>
+                  {fmt(value)}
+                </p>
+              </div>
+              {value !== 0 && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-8 w-8 p-0"
+                  onClick={() => copyValue(line, fmtPlain(value))}
+                  title="Copier cette valeur"
+                >
+                  {isCopied ? <Check className="h-3 w-3 text-emerald-600" /> : <Copy className="h-3 w-3" />}
+                </Button>
+              )}
+            </div>
           )}
         </div>
-        {formula && <p className="text-xs text-muted-foreground">{formula}</p>}
-        {note && <p className="text-xs text-amber-600 mt-0.5">{note}</p>}
       </div>
-      <div className="flex-shrink-0 w-40 text-right">
-        {input ?? <span className="font-mono text-sm">{value !== undefined ? fmt(value) : '—'}</span>}
-      </div>
-    </div>
-  )
-
-  const InputLine = ({ value, onChange }: { value: string; onChange: (v: string) => void }) => (
-    <Input
-      type="number"
-      step="0.01"
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      placeholder="0"
-      className="h-8 text-right font-mono text-sm w-40"
-    />
-  )
+    )
+  }
 
   return (
     <div className="space-y-6">
+      {/* Header */}
       <Card>
         <CardHeader>
           <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
             <div>
               <CardTitle className="flex items-center gap-2 text-xl">
                 <FileText className="h-5 w-5 text-rose-600" />
-                Formulaire 1329-DEF
+                Formulaire 1329-DEF — Aide au remplissage
               </CardTitle>
               <CardDescription className="mt-1">
-                Déclaration de liquidation et de régularisation de la CVAE
+                Suivez les valeurs ci-dessous pour remplir le formulaire sur impots.gouv.fr
                 <br />
                 <span className="text-xs">Loi de finances 2025 · Échéance : 5 mai {year + 1}</span>
               </CardDescription>
@@ -357,28 +376,17 @@ export function Formulaire1329DEFSection({ settings }: Formulaire1329DEFSectionP
         </CardHeader>
       </Card>
 
-      {overdue && !isFiled && (
-        <Alert variant="destructive">
-          <AlertTriangle className="h-4 w-4" />
-          <AlertTitle>Échéance dépassée — Mise en demeure reçue</AlertTitle>
-          <AlertDescription>
-            Date limite : <strong>{data ? fmtDate(data.deadline.dueDate) : '5 mai ' + (year + 1)}</strong>.
-            Régularisez sur{' '}
-            <a href="https://impots.gouv.fr" target="_blank" rel="noopener noreferrer" className="underline inline-flex items-center">
-              impots.gouv.fr <ExternalLink className="h-3 w-3 ml-0.5" />
-            </a>{' '}
-            dans les 30 jours pour éviter l'amende de 150 €.
-          </AlertDescription>
-        </Alert>
-      )}
-
-      <Alert>
-        <Info className="h-4 w-4" />
+      {/* How to use */}
+      <Alert className="border-blue-200 bg-blue-50/50">
+        <Info className="h-4 w-4 text-blue-600" />
         <AlertDescription>
-          <strong>Comment utiliser ce formulaire :</strong> Vous ne saisissez que{' '}
-          <strong>5 champs</strong> (marqués "À saisir" : lignes 01, 05, 12, 16, 21). Tout le reste est{' '}
-          <strong>calculé automatiquement</strong> selon le barème 2025 (loi de finances 2025).
-          Le dégrèvement de 125 € (CA &lt; 2 M€) et la franchise de 63 € sont appliqués automatiquement.
+          <strong>Comment remplir le formulaire sur impots.gouv.fr :</strong>
+          <ol className="list-decimal list-inside mt-2 space-y-1 text-sm">
+            <li>Les champs en <Badge variant="outline" className="text-[10px] bg-blue-100 text-blue-700 border-blue-400 mx-1"><PencilLine className="h-3 w-3 inline mr-0.5" />À SAISIR</Badge> sont les seuls que vous tapez sur impots.gouv.fr</li>
+            <li>Les champs en <Badge variant="outline" className="text-[10px] bg-slate-100 text-slate-500 border-slate-300 mx-1"><Lock className="h-3 w-3 inline mr-0.5" />AUTO</Badge> sont calculés automatiquement par impots.gouv.fr — ne les tapez pas</li>
+            <li>Utilisez le bouton <Copy className="h-3 w-3 inline mx-1" /> pour copier chaque valeur et la coller dans impots.gouv.fr</li>
+            <li>Vérifiez toujours avec votre expert-comptable avant de télétransmettre</li>
+          </ol>
         </AlertDescription>
       </Alert>
 
@@ -390,13 +398,40 @@ export function Formulaire1329DEFSection({ settings }: Formulaire1329DEFSectionP
 
       {!loading && calc && (
         <>
-          {/* Auto-calculated breakdown */}
+          {/* Eligibility check */}
+          <Card className={mustFile ? 'border-amber-300' : 'border-emerald-300'}>
+            <CardContent className="pt-6">
+              <div className="flex items-start gap-3">
+                {mustFile ? (
+                  <AlertTriangle className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                ) : (
+                  <CheckCircle className="h-5 w-5 text-emerald-600 flex-shrink-0 mt-0.5" />
+                )}
+                <div className="text-sm">
+                  <p className="font-semibold">
+                    {caNum === 0
+                      ? 'Saisissez votre chiffre d\'affaires (ligne 01) pour vérifier votre éligibilité'
+                      : mustFile
+                      ? `CA = ${fmt(caNum)} → Vous êtes redevable (CA > 152 500 €). Dépôt de la 1329-DEF obligatoire.`
+                      : `CA = ${fmt(caNum)} → Vous n'êtes pas redevable (CA ≤ 152 500 €). Aucune déclaration à déposer.`}
+                  </p>
+                  {isEligible && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      CA &gt; 500 000 € → imposition effective. Le dépôt reste obligatoire même si le montant final est 0 €.
+                    </p>
+                  )}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Auto-calc summary */}
           {autoCalc && autoCalc.nombreTransactions > 0 && (
             <Card className="border-blue-200 bg-blue-50/30">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-lg">
                   <Sparkles className="h-5 w-5 text-blue-600" />
-                  Données auto-calculées depuis vos transactions
+                  Valeurs calculées depuis vos transactions
                 </CardTitle>
                 <CardDescription>
                   Période : <strong>{autoCalc.periodeLabel}</strong> · {autoCalc.nombreTransactions} transactions analysées
@@ -407,7 +442,7 @@ export function Formulaire1329DEFSection({ settings }: Formulaire1329DEFSectionP
                   <div className="p-3 bg-white rounded-lg border border-emerald-200">
                     <div className="flex items-center gap-2 mb-1">
                       <TrendingUp className="h-4 w-4 text-emerald-600" />
-                      <span className="text-xs font-medium text-emerald-800">Chiffre d'affaires HT</span>
+                      <span className="text-xs font-medium text-emerald-800">CA HT → Ligne 01</span>
                     </div>
                     <p className="text-xl font-bold text-emerald-700">{fmt(autoCalc.chiffreAffaires)}</p>
                   </div>
@@ -418,19 +453,17 @@ export function Formulaire1329DEFSection({ settings }: Formulaire1329DEFSectionP
                     </div>
                     <p className="text-xl font-bold text-amber-700">{fmt(autoCalc.servicesExterieurs)}</p>
                   </div>
-                  <div className="p-3 bg-white rounded-lg border border-blue-300 border-2">
+                  <div className="p-3 bg-white rounded-lg border-2 border-blue-400">
                     <div className="flex items-center gap-2 mb-1">
                       <Euro className="h-4 w-4 text-blue-600" />
-                      <span className="text-xs font-medium text-blue-800">Valeur ajoutée → Ligne 05</span>
+                      <span className="text-xs font-medium text-blue-800">VA → Ligne 05</span>
                     </div>
                     <p className="text-xl font-bold text-blue-700">{fmt(autoCalc.valeurAjoutee)}</p>
                   </div>
                 </div>
                 <div className="flex items-center justify-between">
                   <p className="text-xs text-muted-foreground">
-                    VA = CA − services extérieurs (art. 1586 nonies CGI).
-                    ⚠️ Vérifiez avec votre <strong>2059-E ligne SA</strong> (ou 2033-E ligne 117).
-                    Charges exclues : {fmt(autoCalc.chargesExclues)}
+                    ⚠️ Vérifiez la VA avec votre <strong>2059-E ligne SA</strong> (ou 2033-E ligne 117)
                   </p>
                   <Button variant="outline" size="sm" onClick={recalcFromTransactions} disabled={loading}>
                     <RefreshCw className="h-3 w-3 mr-1" />
@@ -441,15 +474,18 @@ export function Formulaire1329DEFSection({ settings }: Formulaire1329DEFSectionP
             </Card>
           )}
 
-          {/* The form — line by line */}
+          {/* === THE FORM — mirroring the PDF structure === */}
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg">Formulaire 1329-DEF — Calcul automatique</CardTitle>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <FileText className="h-5 w-5 text-rose-600" />
+                Formulaire 1329-DEF — Ligne par ligne
+              </CardTitle>
               <CardDescription>
                 Taux effectif : <strong>{calc.taux_effectif}%</strong>
                 {calc.degrevement_applique && (
                   <Badge variant="outline" className="ml-2 bg-blue-50 text-blue-700 border-blue-300">
-                    Dégrèvement 125 € appliqué (CA &lt; 2 M€)
+                    Dégrèvement 125 € (CA &lt; 2 M€)
                   </Badge>
                 )}
                 {calc.franchise_appliquee && (
@@ -459,190 +495,321 @@ export function Formulaire1329DEFSection({ settings }: Formulaire1329DEFSectionP
                 )}
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-1">
+            <CardContent className="space-y-6">
               {/* Section I */}
-              <div className="text-xs font-bold text-muted-foreground uppercase tracking-wide pt-2 pb-1">
-                I — Données de chiffre d'affaires
-              </div>
-              <Line
-                num="01"
-                label="Montant du chiffre d'affaires de la période de référence"
-                input={
+              <div className="space-y-3">
+                <h3 className="text-sm font-bold text-foreground uppercase tracking-wide border-b pb-2">
+                  I — Données de chiffre d'affaires
+                </h3>
+                <FormLine
+                  line="01"
+                  label="Montant du chiffre d'affaires de la période de référence"
+                  type="saisir"
+                  where="Liasse fiscale 2025 / déclaration de résultat · Période 01/12/{year-1} → 30/11/{year}".replace('{year}', String(year)).replace('{year-1}', String(year - 1))}
+                >
                   <Input
                     type="number"
                     step="0.01"
                     value={caHT}
                     onChange={(e) => { setCaHT(e.target.value); setAutoFilled(false) }}
                     placeholder={autoCalc?.chiffreAffaires ? autoCalc.chiffreAffaires.toString() : '0'}
-                    className={`h-8 text-right font-mono text-sm w-40 ${autoFilled && autoCalc?.chiffreAffaires ? 'border-blue-300 bg-blue-50/30' : ''}`}
+                    className={`h-10 text-lg font-mono ${autoFilled && autoCalc?.chiffreAffaires ? 'border-blue-300 bg-blue-50/30' : ''}`}
                   />
-                }
-                isInput
-                note="Votre CA HT 2025 (12 mois)"
-              />
-              <Line num="04" label="Pourcentage de la valeur ajoutée correspondante" value={calc.ligne04_pourcentage_VA} formula="VA / CA (auto, +1/4 si cessation 2026)" />
+                  {autoCalc?.chiffreAffaires ? (
+                    <p className="text-xs text-blue-600 mt-1">Auto-calculé : {fmt(autoCalc.chiffreAffaires)}</p>
+                  ) : null}
+                </FormLine>
+                <FormLine
+                  line="04"
+                  label="Pourcentage de la valeur ajoutée correspondante"
+                  value={calc.ligne04_pourcentage_VA}
+                  type="auto"
+                  where="Calculé automatiquement par impots.gouv.fr (VA / CA, +1/4 si cessation 2026)"
+                />
+              </div>
 
               {/* Section II */}
-              <div className="text-xs font-bold text-muted-foreground uppercase tracking-wide pt-4 pb-1">
-                II — Données de valeur ajoutée
-              </div>
-              <Line
-                num="05"
-                label="Valeur ajoutée produite"
-                input={
+              <div className="space-y-3">
+                <h3 className="text-sm font-bold text-foreground uppercase tracking-wide border-b pb-2">
+                  II — Données de valeur ajoutée
+                </h3>
+                <FormLine
+                  line="05"
+                  label="Valeur ajoutée produite"
+                  type="saisir"
+                  where="⚠️ Reprenez EXACTEMENT la ligne SA du 2059-E (ou ligne 117 du 2033-E). Ne recalculez pas à la main."
+                >
                   <Input
                     type="number"
                     step="0.01"
                     value={va}
                     onChange={(e) => { setVa(e.target.value); setAutoFilled(false) }}
                     placeholder={autoCalc?.valeurAjoutee ? autoCalc.valeurAjoutee.toString() : '0'}
-                    className={`h-8 text-right font-mono text-sm w-40 ${autoFilled && autoCalc?.valeurAjoutee ? 'border-blue-300 bg-blue-50/30' : ''}`}
+                    className={`h-10 text-lg font-mono ${autoFilled && autoCalc?.valeurAjoutee ? 'border-blue-300 bg-blue-50/30' : ''}`}
                   />
-                }
-                isInput
-                note="Reprenez 2059-E ligne SA (ou 2033-E ligne 117) — ne recalculez pas à la main"
-              />
-              <div className="flex items-center gap-3 py-2 px-3 border-b border-border/50">
-                <div className="flex-shrink-0 w-8 h-8 rounded bg-primary/10 text-primary text-xs font-bold flex items-center justify-center">06</div>
-                <div className="flex-1">
-                  <p className="text-sm">Limitation de la valeur ajoutée (case à cocher)</p>
-                  <p className="text-xs text-muted-foreground">
-                    Ne cochez que si la limitation NE s'applique PAS (entreprises financières).
-                    Plafond : 80% du CA (≤ 7,6 M€) ou 85% (&gt; 7,6 M€).
-                  </p>
-                </div>
-                <Checkbox checked={limitationVA} onCheckedChange={(v) => setLimitationVA(v === true)} />
+                  {autoCalc?.valeurAjoutee ? (
+                    <p className="text-xs text-blue-600 mt-1">Auto-calculé : {fmt(autoCalc.valeurAjoutee)}</p>
+                  ) : null}
+                </FormLine>
+                <FormLine
+                  line="06"
+                  label="Limitation de la valeur ajoutée (case à cocher)"
+                  type="saisir"
+                  where="Cochez UNIQUEMENT si la limitation ne s'applique pas (entreprises financières). Ne cochez pas pour une activité commerciale."
+                >
+                  <div className="flex items-center space-x-2">
+                    <Checkbox id="l06" checked={limitationVA} onCheckedChange={(v) => setLimitationVA(v === true)} />
+                    <Label htmlFor="l06" className="text-sm cursor-pointer">
+                      La limitation de la VA ne s'applique pas à mon entreprise
+                    </Label>
+                  </div>
+                </FormLine>
+                <FormLine
+                  line="07"
+                  label="Montant de la CVAE brute"
+                  value={calc.ligne07_CVAE_brute}
+                  type="auto"
+                  where="Calculé : VA plafonnée (80% ou 85% du CA) × taux effectif"
+                />
               </div>
-              <Line num="07" label="Montant de la CVAE brute" value={calc.ligne07_CVAE_brute} formula="VA plafonnée × taux effectif (auto)" />
 
               {/* Section III */}
-              <div className="text-xs font-bold text-muted-foreground uppercase tracking-wide pt-4 pb-1">
-                III — Calcul de la cotisation sur la valeur ajoutée
+              <div className="space-y-3">
+                <h3 className="text-sm font-bold text-foreground uppercase tracking-wide border-b pb-2">
+                  III — Calcul de la cotisation sur la valeur ajoutée
+                </h3>
+                <FormLine
+                  line="08"
+                  label="Cotisation avant réduction"
+                  value={calc.ligne08_cotisation_avant_reduction}
+                  type="auto"
+                  where="= Ligne 07 (auto)"
+                />
+                <FormLine
+                  line="09"
+                  label="Exonérations (de plein droit)"
+                  type="saisir"
+                  where="Uniquement si vous bénéficiez d'une exonération de plein droit. Sinon, laissez vide."
+                >
+                  <Input
+                    type="number"
+                    step="0.01"
+                    value={exonerations}
+                    onChange={(e) => setExonerations(e.target.value)}
+                    placeholder="0 (laissez vide si non applicable)"
+                    className="h-10 font-mono"
+                  />
+                </FormLine>
+                <FormLine
+                  line="10"
+                  label="Réduction supplémentaire (dégrèvement)"
+                  value={calc.ligne10_reduction_supplementaire}
+                  type="auto"
+                  where={calc.degrevement_applique ? "Dégrèvement de 125 € (CA < 2 M€ en 2025) — calculé automatiquement" : "Aucun dégrèvement (CA ≥ 2 M€)"}
+                />
+                <FormLine
+                  line="11"
+                  label="CVAE due (08 - 09 - 10)"
+                  value={calc.ligne11_CVAE_due}
+                  type="auto"
+                  where={calc.franchise_appliquee ? "≤ 63 € → franchise appliquée (CVAE = 0 €)" : "Base pour les lignes 15 et 20"}
+                  highlight={calc.ligne11_CVAE_due > 0 ? 'result' : 'zero'}
+                />
+                <FormLine
+                  line="12"
+                  label="Acomptes de CVAE versés (juin + septembre)"
+                  type="saisir"
+                  where="Relevés 1329-AC de juin et septembre 2025. Si vous n'aviez pas d'acomptes à verser (CVAE 2024 ≤ 1 500 €), laissez à 0."
+                >
+                  <Input
+                    type="number"
+                    step="0.01"
+                    value={acomptesCVAE}
+                    onChange={(e) => setAcomptesCVAE(e.target.value)}
+                    placeholder="0"
+                    className="h-10 font-mono"
+                  />
+                </FormLine>
+                <FormLine line="13" label="Solde de CVAE à payer (11 - 12)" value={calc.ligne13_solde_CVAE_payer} type="auto" />
+                <FormLine line="14" label="Excédent de CVAE constaté (12 - 11)" value={calc.ligne14_excedent_CVAE} type="auto" />
               </div>
-              <Line num="08" label="Cotisation avant réduction" value={calc.ligne08_cotisation_avant_reduction} formula="= Ligne 07 (auto)" />
-              <Line
-                num="09"
-                label="Exonérations (de plein droit)"
-                input={<InputLine value={exonerations} onChange={setExonerations} />}
-                isInput
-                note="Uniquement si exonération de plein droit — sinon laissez vide"
-              />
-              <Line
-                num="10"
-                label="Réduction supplémentaire (dégrèvement)"
-                value={calc.ligne10_reduction_supplementaire}
-                formula="125 € si CA < 2 M€ (2025) — auto"
-              />
-              <Line
-                num="11"
-                label="CVAE due (08 - 09 - 10)"
-                value={calc.ligne11_CVAE_due}
-                formula={calc.franchise_appliquee ? '≤ 63 € → franchise (CVAE = 0)' : undefined}
-                bold
-              />
-              <Line
-                num="12"
-                label="Acomptes de CVAE versés (juin + septembre)"
-                input={<InputLine value={acomptesCVAE} onChange={setAcomptesCVAE} />}
-                isInput
-                note="Relevés 1329-AC de juin et septembre 2025"
-              />
-              <Line num="13" label="Solde de CVAE à payer (11 - 12)" value={calc.ligne13_solde_CVAE_payer} />
-              <Line num="14" label="Excédent de CVAE constaté (12 - 11)" value={calc.ligne14_excedent_CVAE} />
 
               {/* Taxe additionnelle */}
-              <div className="text-xs font-bold text-muted-foreground uppercase tracking-wide pt-4 pb-1">
-                Taxe additionnelle (frais CCI)
+              <div className="space-y-3">
+                <h3 className="text-sm font-bold text-foreground uppercase tracking-wide border-b pb-2">
+                  Taxe additionnelle (frais CCI)
+                </h3>
+                <FormLine
+                  line="—"
+                  label="Exonéré du paiement de la taxe additionnelle"
+                  type="saisir"
+                  where="Cochez si artisan non CCI, coopérative agricole, activité non commerciale. Ne cochez pas pour une activité commerciale."
+                >
+                  <div className="flex items-center space-x-2">
+                    <Checkbox id="exo-tax" checked={exonereTaxeAdd} onCheckedChange={(v) => setExonereTaxeAdd(v === true)} />
+                    <Label htmlFor="exo-tax" className="text-sm cursor-pointer">
+                      Je suis exonéré du paiement de la taxe additionnelle
+                    </Label>
+                  </div>
+                </FormLine>
+                <FormLine
+                  line="15"
+                  label={`Taxe additionnelle due (${cessation ? '9,23' : '13,84'}% de la ligne 11)${exonereTaxeAdd ? ' — exonéré' : ''}`}
+                  value={calc.ligne15_taxe_add_due}
+                  type="auto"
+                  where={exonereTaxeAdd ? "0 € car exonéré" : "13,84% de la ligne 11 (9,23% si cessation 2026)"}
+                />
+                <FormLine
+                  line="16"
+                  label="Acomptes de taxe additionnelle versés"
+                  type="saisir"
+                  where="Relevés 1329-AC de juin et septembre 2025"
+                >
+                  <Input
+                    type="number"
+                    step="0.01"
+                    value={acomptesTaxeAdd}
+                    onChange={(e) => setAcomptesTaxeAdd(e.target.value)}
+                    placeholder="0"
+                    className="h-10 font-mono"
+                  />
+                </FormLine>
+                <FormLine line="17" label="Solde de taxe additionnelle à payer (15 - 16)" value={calc.ligne17_solde_taxe_add_payer} type="auto" />
+                <FormLine line="18" label="Excédent de taxe additionnelle constaté (16 - 15)" value={calc.ligne18_excedent_taxe_add} type="auto" />
               </div>
-              <div className="flex items-center gap-3 py-2 px-3 border-b border-border/50">
-                <div className="flex-shrink-0 w-8 h-8 rounded bg-primary/10 text-primary text-xs font-bold flex items-center justify-center">—</div>
-                <div className="flex-1">
-                  <p className="text-sm">Exonéré du paiement de la taxe additionnelle</p>
-                  <p className="text-xs text-muted-foreground">Artisans non CCI, coopératives agricoles, etc. Ne cochez pas pour une activité commerciale.</p>
-                </div>
-                <Checkbox checked={exonereTaxeAdd} onCheckedChange={(v) => setExonereTaxeAdd(v === true)} />
-              </div>
-              <Line
-                num="15"
-                label={`Taxe additionnelle due (${cessation ? '9,23' : '13,84'}% de L11)${exonereTaxeAdd ? ' — exonéré' : ''}`}
-                value={calc.ligne15_taxe_add_due}
-              />
-              <Line
-                num="16"
-                label="Acomptes de taxe additionnelle versés"
-                input={<InputLine value={acomptesTaxeAdd} onChange={setAcomptesTaxeAdd} />}
-                isInput
-              />
-              <Line num="17" label="Solde de taxe additionnelle à payer (15 - 16)" value={calc.ligne17_solde_taxe_add_payer} />
-              <Line num="18" label="Excédent de taxe additionnelle constaté (16 - 15)" value={calc.ligne18_excedent_taxe_add} />
 
               {/* Contribution complémentaire */}
-              <div className="text-xs font-bold text-muted-foreground uppercase tracking-wide pt-4 pb-1">
-                Contribution complémentaire temporaire 2025 (47,4%){cessation ? ' — NON applicable (cessation)' : ''}
+              <div className="space-y-3">
+                <h3 className="text-sm font-bold text-foreground uppercase tracking-wide border-b pb-2">
+                  Contribution complémentaire temporaire 2025 (47,4%){cessation ? ' — NON applicable (cessation)' : ''}
+                </h3>
+                <FormLine
+                  line="20"
+                  label="Contribution complémentaire due (ligne 11 × 47,4%)"
+                  value={calc.ligne20_contrib_compl_due}
+                  type="auto"
+                  where="47,4% de la ligne 11 — dispositif exceptionnel 2025 uniquement"
+                />
+                <FormLine
+                  line="21"
+                  label="Acompte de contribution complémentaire versé (100% en sept 2025)"
+                  type="saisir"
+                  where="Acompte unique versé au 15 septembre 2025 (si CVAE 2024 > 1 500 €)"
+                >
+                  <Input
+                    type="number"
+                    step="0.01"
+                    value={acompteContrib}
+                    onChange={(e) => setAcompteContrib(e.target.value)}
+                    placeholder="0"
+                    className="h-10 font-mono"
+                  />
+                </FormLine>
+                <FormLine line="22" label="Solde de contribution à payer (20 - 21)" value={calc.ligne22_solde_contrib_payer} type="auto" />
+                <FormLine line="23" label="Excédent de contribution constaté (21 - 20)" value={calc.ligne23_excedent_contrib} type="auto" />
               </div>
-              <Line num="20" label="Contribution complémentaire due (11 × 47,4%)" value={calc.ligne20_contrib_compl_due} />
-              <Line
-                num="21"
-                label="Acompte de contribution complémentaire versé (100% en sept 2025)"
-                input={<InputLine value={acompteContrib} onChange={setAcompteContrib} />}
-                isInput
-              />
-              <Line num="22" label="Solde de contribution à payer (20 - 21)" value={calc.ligne22_solde_contrib_payer} />
-              <Line num="23" label="Excédent de contribution constaté (21 - 20)" value={calc.ligne23_excedent_contrib} />
 
               {/* Récapitulatif */}
-              <div className="text-xs font-bold text-muted-foreground uppercase tracking-wide pt-4 pb-1">Récapitulatif</div>
-              <Line num="24" label="Total des acomptes versés (12 + 16 + 21)" value={calc.ligne24_total_acomptes} />
-              <Line num="25" label="Total à payer (13 + 17 + 22)" value={calc.ligne25_total_payer} />
-              <Line num="26" label="Total des excédents (14 + 18 + 23)" value={calc.ligne26_total_excedents} />
-
-              {/* Section IV */}
-              <div className="text-xs font-bold text-muted-foreground uppercase tracking-wide pt-4 pb-1">
-                IV — Paiement ou excédent
+              <div className="space-y-3">
+                <h3 className="text-sm font-bold text-foreground uppercase tracking-wide border-b pb-2">
+                  Récapitulatif
+                </h3>
+                <FormLine line="24" label="Total des acomptes versés (12 + 16 + 21)" value={calc.ligne24_total_acomptes} type="auto" />
+                <FormLine line="25" label="Total à payer (13 + 17 + 22)" value={calc.ligne25_total_payer} type="auto" />
+                <FormLine line="26" label="Total des excédents (14 + 18 + 23)" value={calc.ligne26_total_excedents} type="auto" />
               </div>
-              {calc.ligne27_CVAE_DUE_paiement > 0 ? (
-                <div className="mt-4 p-4 bg-rose-50 rounded-lg border-2 border-rose-300 flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-rose-800">Ligne 27 — CVAE DUE (à payer)</p>
-                    <p className="text-xs text-rose-600">25 - 26 · Téléréglement obligatoire</p>
+
+              {/* Section IV — Résultat final */}
+              <div className="space-y-3">
+                <h3 className="text-sm font-bold text-foreground uppercase tracking-wide border-b pb-2">
+                  IV — Paiement ou excédent
+                </h3>
+                {calc.ligne27_CVAE_DUE_paiement > 0 ? (
+                  <div className="p-6 bg-rose-50 rounded-lg border-2 border-rose-400 flex items-center justify-between">
+                    <div>
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="w-10 h-10 rounded-lg bg-rose-500 text-white font-bold flex items-center justify-center text-sm">27</span>
+                        <Badge variant="outline" className="bg-rose-100 text-rose-700 border-rose-400">
+                          <Lock className="h-3 w-3 mr-0.5" />AUTO
+                        </Badge>
+                      </div>
+                      <p className="text-sm font-medium text-rose-900">CVAE DUE (à payer)</p>
+                      <p className="text-xs text-rose-600">25 - 26 · Téléréglement obligatoire</p>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <p className="text-4xl font-bold text-rose-700">{fmt(calc.ligne27_CVAE_DUE_paiement)}</p>
+                      <Button size="sm" variant="outline" className="h-10 w-10 p-0" onClick={() => copyValue('27', fmtPlain(calc.ligne27_CVAE_DUE_paiement))}>
+                        {copiedLine === '27' ? <Check className="h-4 w-4 text-emerald-600" /> : <Copy className="h-4 w-4" />}
+                      </Button>
+                    </div>
                   </div>
-                  <p className="text-3xl font-bold text-rose-700">{fmt(calc.ligne27_CVAE_DUE_paiement)}</p>
-                </div>
-              ) : calc.ligne28_excedent_versement > 0 ? (
-                <div className="mt-4 p-4 bg-emerald-50 rounded-lg border-2 border-emerald-300 flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-emerald-800">Ligne 28 — Excédent de versement (à rembourser)</p>
-                    <p className="text-xs text-emerald-600">26 - 25 · Joignez un RIB à votre SIE</p>
+                ) : calc.ligne28_excedent_versement > 0 ? (
+                  <div className="p-6 bg-emerald-50 rounded-lg border-2 border-emerald-400 flex items-center justify-between">
+                    <div>
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="w-10 h-10 rounded-lg bg-emerald-500 text-white font-bold flex items-center justify-center text-sm">28</span>
+                        <Badge variant="outline" className="bg-emerald-100 text-emerald-700 border-emerald-400">
+                          <Lock className="h-3 w-3 mr-0.5" />AUTO
+                        </Badge>
+                      </div>
+                      <p className="text-sm font-medium text-emerald-900">Excédent de versement (à rembourser)</p>
+                      <p className="text-xs text-emerald-600">26 - 25 · Transmettez un RIB à votre SIE</p>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <p className="text-4xl font-bold text-emerald-700">{fmt(calc.ligne28_excedent_versement)}</p>
+                      <Button size="sm" variant="outline" className="h-10 w-10 p-0" onClick={() => copyValue('28', fmtPlain(calc.ligne28_excedent_versement))}>
+                        {copiedLine === '28' ? <Check className="h-4 w-4 text-emerald-600" /> : <Copy className="h-4 w-4" />}
+                      </Button>
+                    </div>
                   </div>
-                  <p className="text-3xl font-bold text-emerald-700">{fmt(calc.ligne28_excedent_versement)}</p>
-                </div>
-              ) : (
-                <div className="mt-4 p-4 bg-slate-50 rounded-lg border-2 border-slate-300 flex items-center justify-between">
-                  <p className="text-sm font-medium text-slate-700">Néant — acomptes = cotisation due (0 € à payer)</p>
-                  <p className="text-2xl font-bold text-slate-600">0 €</p>
-                </div>
-              )}
+                ) : (
+                  <div className="p-6 bg-slate-50 rounded-lg border-2 border-slate-300 flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-slate-700">Néant — Acomptes = cotisation due</p>
+                      <p className="text-xs text-slate-500">Aucun paiement, aucun remboursement</p>
+                    </div>
+                    <p className="text-4xl font-bold text-slate-600">0 €</p>
+                  </div>
+                )}
+              </div>
             </CardContent>
           </Card>
 
-          {/* Effectifs + Télétransmission */}
+          {/* Effectifs */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-lg">
                 <Users className="h-5 w-5 text-purple-600" />
-                Effectifs salariés & télétransmission
+                Effectifs salariés
               </CardTitle>
+              <CardDescription>Déclarés simultanément (champ séparé sur impots.gouv.fr)</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent>
               <div className="space-y-2">
                 <Label htmlFor="eff" className="flex items-center gap-2">
                   <Users className="h-4 w-4 text-purple-600" />
                   Effectifs salariés (moyenne annuelle)
                 </Label>
-                <Input id="eff" type="number" min="0" step="1" value={effectifs} onChange={(e) => setEffectifs(parseInt(e.target.value) || 0)} className="max-w-xs" />
-                <p className="text-xs text-muted-foreground">0 si président non-salarié (SASU)</p>
+                <Input id="eff" type="number" min="0" step="1" value={effectifs} onChange={(e) => setEffectifs(parseInt(e.target.value) || 0)} className="max-w-xs h-10 text-lg font-mono" />
+                <p className="text-xs text-muted-foreground">
+                  0 si président non-salarié (SASU). Sinon, moyenne annuelle des salariés.
+                </p>
               </div>
-              <Separator />
+            </CardContent>
+          </Card>
+
+          {/* Télétransmission */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-lg">
+                <Send className="h-5 w-5 text-purple-600" />
+                Télétransmission sur impots.gouv.fr
+              </CardTitle>
+              <CardDescription>
+                Une fois le formulaire rempli sur impots.gouv.fr, archivez la référence ici.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
               {isFiled ? (
                 <div className="p-4 bg-emerald-50 rounded-lg border border-emerald-200 space-y-2">
                   <div className="flex items-center gap-2 text-emerald-700 font-semibold">
@@ -657,6 +824,16 @@ export function Formulaire1329DEFSection({ settings }: Formulaire1329DEFSectionP
                 </div>
               ) : (
                 <>
+                  <Alert>
+                    <Info className="h-4 w-4" />
+                    <AlertDescription>
+                      <strong>Procédure :</strong> Connectez-vous à{' '}
+                      <a href="https://impots.gouv.fr" target="_blank" rel="noopener noreferrer" className="text-blue-600 underline inline-flex items-center">
+                        impots.gouv.fr <ExternalLink className="h-3 w-3 ml-0.5" />
+                      </a>{' '}
+                      → espace professionnel → rubrique « Professionnels » → 1329-DEF → saisissez les valeurs → télétransmettez.
+                    </AlertDescription>
+                  </Alert>
                   <div className="grid md:grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label htmlFor="ref">Référence accusé de réception</Label>
@@ -670,7 +847,7 @@ export function Formulaire1329DEFSection({ settings }: Formulaire1329DEFSectionP
                   <div className="flex flex-col sm:flex-row gap-2">
                     <Button onClick={() => handleSave('save')} disabled={saving} variant="outline">
                       {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
-                      Enregistrer
+                      Enregistrer les valeurs
                     </Button>
                     <Button onClick={() => handleSave('file')} disabled={saving}>
                       {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <CheckCircle className="h-4 w-4 mr-2" />}

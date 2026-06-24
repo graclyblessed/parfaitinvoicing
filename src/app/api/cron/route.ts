@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { sendReminderEmail, getEmailProviderStatus } from '@/lib/email'
+import { runDeadlineMaintenance } from '@/lib/deadlines-renewal'
 
 // Vercel Cron Job endpoint - runs daily at 8:00 AM UTC
 // Configured in vercel.json
@@ -18,14 +19,24 @@ export async function GET(request: NextRequest) {
   try {
     console.log('🕐 Cron job started: Checking for fiscal deadline reminders...')
 
+    // --- STEP 1: AUTO-RENEWAL — ensure deadlines exist for current + next year ---
+    // This guarantees annual obligations (CVAE1, CFE, TVA-CA12, LIASSE, DAS2) are
+    // always pre-created well before their due dates, so nothing slips through.
+    const maintenance = await runDeadlineMaintenance()
+    console.log(
+      `📅 Deadline maintenance: ${maintenance.renewed} new deadlines created, ` +
+        `${maintenance.overdueMarked} marked overdue (years ${maintenance.yearsCovered.join(', ')})`
+    )
+
     // Get settings
     const settings = await db.settings.findFirst()
-    
+
     if (!settings?.email) {
       console.log('⚠️ No email configured in settings')
-      return NextResponse.json({ 
+      return NextResponse.json({
         status: 'skipped',
-        reason: 'No email configured in settings' 
+        reason: 'No email configured in settings',
+        maintenance,
       })
     }
 
@@ -33,9 +44,10 @@ export async function GET(request: NextRequest) {
     const providerStatus = getEmailProviderStatus()
     if (!providerStatus.configured) {
       console.log('⚠️ No email provider configured:', providerStatus.message)
-      return NextResponse.json({ 
+      return NextResponse.json({
         status: 'skipped',
-        reason: providerStatus.message 
+        reason: providerStatus.message,
+        maintenance,
       })
     }
 
@@ -55,7 +67,7 @@ export async function GET(request: NextRequest) {
         reminderSent: false,
       },
     })
-    
+
     // Get upcoming deadlines (3-7 days) - not yet reminded
     const upcomingDeadlines = await db.taxDeadline.findMany({
       where: {
@@ -68,15 +80,18 @@ export async function GET(request: NextRequest) {
       },
     })
 
-    console.log(`📊 Found ${urgentDeadlines.length} urgent, ${upcomingDeadlines.length} upcoming deadlines`)
+    console.log(
+      `📊 Found ${urgentDeadlines.length} urgent, ${upcomingDeadlines.length} upcoming deadlines`
+    )
 
     // If no deadlines to remind about
     if (urgentDeadlines.length === 0 && upcomingDeadlines.length === 0) {
       console.log('✅ No deadlines requiring reminders today')
-      return NextResponse.json({ 
+      return NextResponse.json({
         status: 'success',
         sent: 0,
-        message: 'No deadlines requiring reminders' 
+        message: 'No deadlines requiring reminders',
+        maintenance,
       })
     }
 
@@ -129,6 +144,7 @@ export async function GET(request: NextRequest) {
       provider: providerStatus.provider,
       urgent: urgentDeadlines.length,
       upcoming: upcomingDeadlines.length,
+      maintenance,
       deadlines: allDeadlines.map((d) => ({
         name: d.name,
         dueDate: d.dueDate,

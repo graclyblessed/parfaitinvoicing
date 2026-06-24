@@ -599,3 +599,64 @@ model TaxPayment {
   @@index([paymentDate])
   @@index([declarationId])
 }
+
+// Formulaire 1329-DEF — Déclaration de liquidation et de régularisation de la CVAE
+// Version applicable au 01/01/2025 (loi de finances 2025 - loi n° 2025-127 du 14/02/2025).
+// Solde annuel : compare CVAE due (N) aux acomptes versés → solde à payer ou excédent.
+// Échéance : 5 mai N+1. CVAE non supprimée (reportée à 2030).
+// Contribution complémentaire 47,4 % : 2025 uniquement. Franchise : 63 €.
+model Formulaire1329DEF {
+  id              String   @id @default(cuid())
+  year            Int      // Année d'imposition (ex: 2025 pour CVAE 2025, déposée en 2026)
+  status          String   @default("draft") // draft, complete, filed
+
+  // Section I : Chiffre d'affaires
+  ligne01_CA_periode_reference   Float  @default(0)
+  ligne02_CA_reel                Float  @default(0)
+  ligne03_CA_groupe              Float  @default(0)
+  ligne04_pourcentage_VA         Float  @default(0)
+
+  // Section II : Valeur ajoutée
+  ligne05_VA_produite            Float  @default(0)
+  ligne06_limitation_VA          Boolean @default(false)
+  ligne07_CVAE_brute             Float  @default(0)
+
+  // Section III : Cotisation
+  ligne08_cotisation_avant_reduction  Float  @default(0)
+  ligne09_exonerations               Float  @default(0)
+  ligne10_reduction_supplementaire   Float  @default(0)
+  ligne11_CVAE_due                   Float  @default(0) // 0 si ≤ 63 € (franchise)
+
+  ligne12_acomptes_CVAE         Float  @default(0)
+  ligne13_solde_CVAE_payer      Float  @default(0)
+  ligne14_excedent_CVAE         Float  @default(0)
+
+  ligne15_taxe_add_due          Float  @default(0) // 13,84 % de L11 (9,23 % si cessation)
+  ligne16_acomptes_taxe_add     Float  @default(0)
+  ligne17_solde_taxe_add_payer  Float  @default(0)
+  ligne18_excedent_taxe_add     Float  @default(0)
+
+  ligne20_contrib_compl_due      Float  @default(0) // L11 × 47,4 % (2025 uniquement)
+  ligne21_acompte_contrib_compl  Float  @default(0)
+  ligne22_solde_contrib_payer    Float  @default(0)
+  ligne23_excedent_contrib       Float  @default(0)
+
+  // Section IV : Paiement ou excédent
+  ligne24_total_acomptes        Float  @default(0) // L12 + L16 + L21
+  ligne25_total_payer           Float  @default(0) // L13 + L17 + L22
+  ligne26_total_excedents       Float  @default(0) // L14 + L18 + L23
+  ligne27_CVAE_DUE_paiement     Float  @default(0) // L25 - L26 si > 0
+  ligne28_excedent_versement     Float  @default(0) // L26 - L25 si > 0 → joindre RIB
+
+  // Métadonnées
+  cessation_2026                Boolean @default(false)
+  effectifsSalaries             Int     @default(0)
+  periodeLabel                  String  @default("")
+  reference_teletransmission    String?
+  filedAt                       DateTime?
+
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@unique([year])
+}

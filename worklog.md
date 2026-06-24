@@ -149,3 +149,37 @@ Stage Summary:
 - Full tax payment tracking system implemented with QuickBooks-style prior payment support
 - Form 2065 now dynamically calculates acomptesVerses from actual IS payments
 - All UI text in French, matching existing codebase patterns
+
+---
+Task ID: 11
+Agent: main (Z.ai Code)
+Task: Resolve CVAE1/1330-SAFE mise en demeure + add automatic annual obligation tracking to parfaitinvoicing
+
+Work Log:
+- Cloned https://github.com/graclyblessed/parfaitinvoicing (made public by user)
+- Copied repo content into /home/z/my-project (preserved .git, Caddyfile)
+- Converted Prisma schema from PostgreSQL → SQLite (sandbox only supports SQLite; removed @db.Text annotations)
+- Created .env with NEXTAUTH_SECRET; system DATABASE_URL env var points to db/custom.db
+- Installed deps (bun install), ran prisma generate + db push
+- Started dev server (next dev -p 3000) — note: sandbox kills background processes between bash calls; server only lives during the call that starts it
+- Inspected existing code: tax.ts (generateTaxDeadlines), /api/deadlines, /api/cron, declarations-section, page.tsx
+- Found gaps: (1) no CVAE1/1330-SAFE in deadline generator, (2) no auto-renewal of annual deadlines, (3) no "filed" tracking separate from payment
+- Created src/lib/cvae1.ts: valeur ajoutée calculation per art. 1586 nonies CGI (VA = CA - services extérieurs - achats), effectifs salariés, overdue detection, obligation status registry
+- Updated src/lib/tax.ts: added CVAE1 type to TaxDeadlineType union, added CVAE1 to generateTaxDeadlines() with correct period (01/12/YYYY-2 → 30/11/YYYY-1) and due date (May 5 of YYYY), added ANNUAL_OBLIGATION_TYPES + OBLIGATION_LABELS
+- Created src/lib/deadlines-renewal.ts: ensureDeadlinesForYears() + markOverdueDeadlines() + runDeadlineMaintenance() — the AUTO-RENEWAL engine
+- Updated src/app/api/deadlines/route.ts: GET now auto-renews (current + next year) + marks overdue + returns meta
+- Updated src/app/api/cron/route.ts: added runDeadlineMaintenance() at start of daily cron — guarantees annual obligations always pre-created
+- Created src/app/api/declarations/cvae1/route.ts: GET (calculate VA from transactions + fetch filing status), POST (save/file with reference)
+- Created src/components/cvae1-section.tsx: full CVAE1/1330-SAFE UI — VA calculation, effectifs input, télétransmission tracking, mise en demeure alert
+- Created src/components/annual-obligations-section.tsx: dashboard overview of all annual obligations with progress bar, status badges, auto-renewal info
+- Updated src/app/page.tsx: added "Obligations" tab + "CVAE1 (1330-SAFE)" tab + CVAE1 alert on overview + CVAE1 section in deadlines tab
+- Fixed off-by-one year bug in getCVAE1Deadline(): FY ending Nov 30, YYYY → declaration due May 5 of YYYY+1 (not YYYY). Verified: FY 2025 → due 2026-05-05 (matches mise en demeure exactly)
+- Reset DB and re-verified: CVAE1 API returns correct dates (period 01/12/2024-30/11/2025, due 2026-05-05, overdue 42 days)
+- Ran bun run lint: clean, no errors
+
+Stage Summary:
+- CVAE1/1330-SAFE declaration fully supported: auto-calculates valeur ajoutée from transactions, tracks filing status, alerts on overdue
+- Automatic annual obligation renewal: deadlines for current + next year auto-generated on every /api/deadlines GET and every cron run — nothing slips through anymore
+- Annual obligations dashboard: single view of CVAE1, TVA, LIASSE, CFE, DAS2 with progress tracking
+- Dates verified against the actual mise en demeure: period 01/12/2024-30/11/2025, deadline 05/05/2026, overdue by 42 days
+- Key files: src/lib/cvae1.ts, src/lib/deadlines-renewal.ts, src/app/api/declarations/cvae1/route.ts, src/components/cvae1-section.tsx, src/components/annual-obligations-section.tsx

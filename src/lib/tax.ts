@@ -66,10 +66,17 @@ export function calculateISQuarterlyPayment(previousYearProfit: number): number 
 }
 
 // Tax deadlines for SASU
+// CVAE1 = 1330-SAFE (Déclaration de la valeur ajoutée et des effectifs salariés)
+//   - Even though the CVAE tax was abolished on 01/01/2024, the 1330-SAFE declaration
+//     is still MANDATORY: it is used to compute the CFE plafonnement and to declare
+//     the salaried workforce (effectifs salariés) used for TVA thresholds, etc.
+//   - Missing it triggers a 150 € fine (art. 1729 B CGI), up to 1 500 € in some cases.
+export type TaxDeadlineType = 'IS' | 'TVA' | 'CFE' | 'CVAE1' | 'LIASSE' | 'DAS2' | 'TVS' | 'OTHER'
+
 export interface TaxDeadline {
   id: string
   name: string
-  type: 'IS' | 'TVA' | 'CFE' | 'LIASSE' | 'DAS2' | 'TVS' | 'OTHER'
+  type: TaxDeadlineType
   dueDate: Date
   periodStart?: Date
   periodEnd?: Date
@@ -77,11 +84,19 @@ export interface TaxDeadline {
   penalty?: string
 }
 
-// Generate tax deadlines for a year
+// Compute the CVAE1 / 1330-SAFE filing deadline for a given fiscal year.
+// Fiscal year ending Nov 30, YYYY → declaration due May 5 of YYYY+1
+// (art. 1586 octies II.1 CGI).
+// Example: FY 01/12/2024 → 30/11/2025 (fyEndYear=2025) → deadline May 5, 2026.
+export function getCVAE1Deadline(fyEndYear: number): Date {
+  return new Date(fyEndYear + 1, 4, 5) // May 5 of the year AFTER the FY ends
+}
+
+// Generate tax deadlines for a year (deadlines that FALL DUE in the given calendar year)
 export function generateTaxDeadlines(year: number): TaxDeadline[] {
   const deadlines: TaxDeadline[] = []
-  
-  // IS - Quarterly payments
+
+  // IS - Quarterly payments (acomptes) — fall due in the same calendar year as the FY end
   const isDates = getISPaymentDates(year)
   isDates.forEach((d, i) => {
     deadlines.push({
@@ -95,7 +110,7 @@ export function generateTaxDeadlines(year: number): TaxDeadline[] {
       penalty: 'Pénalité de 10% + intérêts de retard',
     })
   })
-  
+
   // TVA - Annual (CA12) - for franchise en base, it's declarative only
   deadlines.push({
     id: `TVA-CA12-${year}`,
@@ -107,7 +122,24 @@ export function generateTaxDeadlines(year: number): TaxDeadline[] {
     description: 'Déclaration annuelle de TVA - Régime simplifié',
     penalty: 'Pénalité de 10% + intérêts de retard',
   })
-  
+
+  // CVAE1 / 1330-SAFE - Déclaration de la valeur ajoutée et des effectifs salariés
+  // For a fiscal year ending Nov 30 of `year-1`, declaration falls due May 5 of `year`.
+  // getCVAE1Deadline(fyEndYear) returns May 5 of fyEndYear+1, so we pass (year-1).
+  deadlines.push({
+    id: `CVAE1-${year}`,
+    name: 'CVAE1 - Déclaration valeur ajoutée (1330-SAFE)',
+    type: 'CVAE1',
+    dueDate: getCVAE1Deadline(year - 1),
+    periodStart: new Date(year - 2, 11, 1),  // Dec 1 of year-2 (fiscal year start)
+    periodEnd: new Date(year - 1, 10, 30),    // Nov 30 of year-1 (fiscal year end)
+    description:
+      "Déclaration de la valeur ajoutée et des effectifs salariés (1330-SAFE). " +
+      "Bien que la taxe CVAE soit supprimée depuis 2024, cette déclaration reste OBLIGATOIRE " +
+      "(plafonnement CFE + déclaration des effectifs). Omission = 150 € d'amende (art. 1729 B CGI).",
+    penalty: "Amende de 150 € (portée à 1 500 € dans certains cas) + intérêts de retard",
+  })
+
   // Liasse Fiscale
   deadlines.push({
     id: `LIASSE-${year}`,
@@ -119,7 +151,7 @@ export function generateTaxDeadlines(year: number): TaxDeadline[] {
     description: 'Déclaration de résultats et liasse fiscale - Régime simplifié',
     penalty: 'Pénalité de 10% minimum',
   })
-  
+
   // CFE (Cotisation Foncière des Entreprises)
   deadlines.push({
     id: `CFE-${year}`,
@@ -129,7 +161,7 @@ export function generateTaxDeadlines(year: number): TaxDeadline[] {
     description: 'Cotisation Foncière des Entreprises',
     penalty: 'Pénalité de 10%',
   })
-  
+
   // DAS2 - Declaration of fees paid to third parties
   deadlines.push({
     id: `DAS2-${year}`,
@@ -141,8 +173,30 @@ export function generateTaxDeadlines(year: number): TaxDeadline[] {
     description: 'Déclaration des honoraires, commissions et ristournes',
     penalty: 'Pénalité de 10%',
   })
-  
+
   return deadlines
+}
+
+// List of ANNUAL obligation types (excluding quarterly IS acomptes).
+// Used by the annual-obligations overview and auto-renewal logic.
+export const ANNUAL_OBLIGATION_TYPES: TaxDeadlineType[] = [
+  'TVA',
+  'CVAE1',
+  'LIASSE',
+  'CFE',
+  'DAS2',
+]
+
+// Human-readable labels for each obligation type
+export const OBLIGATION_LABELS: Record<TaxDeadlineType, string> = {
+  IS: 'Impôt sur les Sociétés (acomptes)',
+  TVA: 'TVA - Déclaration annuelle (CA12)',
+  CVAE1: 'CVAE1 - Valeur ajoutée (1330-SAFE)',
+  LIASSE: 'Liasse Fiscale + Bilan',
+  CFE: 'CFE - Cotisation Foncière',
+  DAS2: 'DAS2 - Honoraires versés',
+  TVS: 'TVS - Taxe sur les véhicules',
+  OTHER: 'Autre',
 }
 
 // Get upcoming deadlines

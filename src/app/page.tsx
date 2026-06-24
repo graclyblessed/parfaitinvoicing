@@ -29,6 +29,8 @@ import { FormulaireISSection } from '@/components/formulaire-is-section'
 import { FormulaireTVASection } from '@/components/formulaire-tva-section'
 import { TaxPaymentsSection } from '@/components/tax-payments-section'
 import { DevisSection } from '@/components/devis-section'
+import { CVAE1Section } from '@/components/cvae1-section'
+import { AnnualObligationsSection } from '@/components/annual-obligations-section'
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from '@/components/ui/chart'
 import { Bar, BarChart, XAxis, YAxis, CartesianGrid, Line, LineChart as RechartsLineChart, ResponsiveContainer, Area, AreaChart } from 'recharts'
 
@@ -673,6 +675,12 @@ function TaxDashboardContent() {
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList className="mb-6">
           <TabsTrigger value="overview">Vue d'ensemble</TabsTrigger>
+          <TabsTrigger value="obligations">
+            <span className="relative">
+              Obligations
+              <span className="absolute -top-1.5 -right-3 h-2 w-2 rounded-full bg-rose-500" />
+            </span>
+          </TabsTrigger>
           <TabsTrigger value="transactions">Transactions</TabsTrigger>
           <TabsTrigger value="deadlines">Échéances</TabsTrigger>
           <TabsTrigger value="invoices">Factures</TabsTrigger>
@@ -680,6 +688,12 @@ function TaxDashboardContent() {
           <TabsTrigger value="liasse">Liasse Fiscale</TabsTrigger>
           <TabsTrigger value="formulaire-is">Formulaires IS</TabsTrigger>
           <TabsTrigger value="formulaire-tva">TVA (3517-S)</TabsTrigger>
+          <TabsTrigger value="cvae1">
+            <span className="relative">
+              CVAE1 (1330-SAFE)
+              <span className="absolute -top-1.5 -right-2 h-2 w-2 rounded-full bg-rose-500" />
+            </span>
+          </TabsTrigger>
           <TabsTrigger value="declarations">Déclarations</TabsTrigger>
           <TabsTrigger value="tax-payments">
             <Receipt className="h-4 w-4 mr-1.5" />
@@ -689,6 +703,11 @@ function TaxDashboardContent() {
         </TabsList>
 
         {/* Overview Tab */}
+        {/* Annual Obligations Tab */}
+        <TabsContent value="obligations" className="space-y-6">
+          <AnnualObligationsSection onNavigate={setActiveTab} />
+        </TabsContent>
+
         <TabsContent value="overview" className="space-y-6">
           {/* Fiscal Year Header */}
           <Card className="bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200">
@@ -720,6 +739,54 @@ function TaxDashboardContent() {
               </div>
             </CardContent>
           </Card>
+
+          {/* Alerte CVAE1 / Obligations en retard */}
+          {deadlines.some((d) => (d.type === 'CVAE1') && (d.status === 'overdue' || d.status === 'pending')) && (
+            <Alert variant={deadlines.some((d) => d.type === 'CVAE1' && d.status === 'overdue') ? 'destructive' : 'default'}>
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                <span>
+                  {deadlines.some((d) => d.type === 'CVAE1' && d.status === 'overdue') ? (
+                    <><strong>Déclaration CVAE1 (1330-SAFE) en retard.</strong> Une mise en demeure a pu être reçue. Régularisez sous 30 jours pour éviter l'amende de 150&nbsp;€.</>
+                  ) : (
+                    <><strong>Déclaration CVAE1 (1330-SAFE) à venir.</strong> N'oubliez pas de la télétransmettre sur impots.gouv.fr avant l'échéance.</>
+                  )}
+                </span>
+                <Button size="sm" variant="outline" onClick={() => setActiveTab('cvae1')} className="flex-shrink-0">
+                  Traiter la déclaration
+                </Button>
+              </AlertDescription>
+            </Alert>
+          )}
+
+          {/* Alerte obligations annuelles — résumé */}
+          {deadlines.filter((d) => ['CVAE1', 'TVA', 'LIASSE', 'CFE', 'DAS2'].includes(d.type) && d.status !== 'done').length > 0 && (
+            <Card className="border-blue-200 bg-blue-50/50">
+              <CardContent className="py-4">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <Calendar className="h-5 w-5 text-blue-600 flex-shrink-0" />
+                    <div>
+                      <p className="font-semibold text-blue-900">
+                        {deadlines.filter((d) => ['CVAE1', 'TVA', 'LIASSE', 'CFE', 'DAS2'].includes(d.type) && d.status === 'overdue').length > 0 && (
+                          <span className="text-red-600 mr-2">
+                            {deadlines.filter((d) => ['CVAE1', 'TVA', 'LIASSE', 'CFE', 'DAS2'].includes(d.type) && d.status === 'overdue').length} en retard,
+                          </span>
+                        )}
+                        {deadlines.filter((d) => ['CVAE1', 'TVA', 'LIASSE', 'CFE', 'DAS2'].includes(d.type) && d.status !== 'done').length} obligation(s) annuelle(s) en cours
+                      </p>
+                      <p className="text-xs text-blue-700">
+                        Suivez et anticipez toutes vos échéances fiscales annuelles dans un seul tableau de bord.
+                      </p>
+                    </div>
+                  </div>
+                  <Button size="sm" variant="default" onClick={() => setActiveTab('obligations')} className="flex-shrink-0">
+                    Voir les obligations
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           {/* KPIs Financiers */}
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
@@ -1544,6 +1611,78 @@ function TaxDashboardContent() {
             </Card>
           )}
 
+          {/* CVAE1 Section - Rose Theme */}
+          {deadlines.filter(d => d.type === 'CVAE1').length > 0 && (
+            <Card className="border-l-4 border-l-rose-500 shadow-sm">
+              <CardHeader className="bg-gradient-to-r from-rose-50 to-pink-100/50 rounded-t-lg">
+                <CardTitle className="flex items-center gap-3 text-rose-800">
+                  <div className="p-2 bg-rose-500 rounded-lg">
+                    <TrendingUp className="h-5 w-5 text-white" />
+                  </div>
+                  <div>
+                    <span>CVAE1 (1330-SAFE)</span>
+                    <span className="text-sm font-normal text-rose-600 block">Valeur ajoutée + effectifs salariés — obligatoire malgré la suppression de la taxe</span>
+                  </div>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="pt-4">
+                <div className="rounded-md border border-rose-200 overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="bg-rose-50/50">
+                        <TableHead className="text-rose-700">Échéance</TableHead>
+                        <TableHead className="text-rose-700">Date</TableHead>
+                        <TableHead className="text-rose-700">Statut</TableHead>
+                        <TableHead className="text-rose-700">Jours restants</TableHead>
+                        <TableHead className="text-rose-700">Action</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {deadlines.filter(d => d.type === 'CVAE1').map((d) => {
+                        const days = getDaysUntil(d.dueDate)
+                        return (
+                          <TableRow key={d.id} className="hover:bg-rose-50/30">
+                            <TableCell className="font-medium">{d.name}</TableCell>
+                            <TableCell className="font-mono">{formatDate(d.dueDate)}</TableCell>
+                            <TableCell>
+                              <Badge variant={d.status === 'done' ? 'default' : d.status === 'overdue' ? 'destructive' : 'secondary'} className={d.status === 'done' ? 'bg-emerald-500' : ''}>
+                                {d.status === 'done' ? (
+                                  <><CheckCircle className="h-3 w-3 mr-1" /> Télétransmis</>
+                                ) : d.status === 'overdue' ? (
+                                  <><AlertCircle className="h-3 w-3 mr-1" /> En retard</>
+                                ) : (
+                                  <><Clock className="h-3 w-3 mr-1" /> En attente</>
+                                )}
+                              </Badge>
+                            </TableCell>
+                            <TableCell>
+                              <span className={`px-2 py-1 rounded-full text-sm ${days < 0 ? 'bg-red-100 text-red-700 font-medium' : days <= 7 ? 'bg-red-100 text-red-700 font-medium' : days <= 30 ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                                {days < 0 ? `${Math.abs(days)} jours de retard` : days === 0 ? "Aujourd'hui" : `${days} jours`}
+                              </span>
+                            </TableCell>
+                            <TableCell>
+                              <Button size="sm" variant="outline" onClick={() => setActiveTab('cvae1')}>
+                                Traiter
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        )
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+                <Alert className="mt-3 border-rose-200 bg-rose-50/50">
+                  <AlertCircle className="h-4 w-4 text-rose-600" />
+                  <AlertDescription className="text-xs text-rose-800">
+                    Bien que la taxe CVAE soit supprimée depuis 2024, cette déclaration reste{' '}
+                    <strong>obligatoire</strong> (plafonnement CFE + effectifs). Omission ={' '}
+                    <strong>150&nbsp;€ d&apos;amende</strong> (art. 1729 B CGI).
+                  </AlertDescription>
+                </Alert>
+              </CardContent>
+            </Card>
+          )}
+
           {/* CFE Section - Green Theme */}
           {deadlines.filter(d => d.type === 'CFE').length > 0 && (
             <Card className="border-l-4 border-l-emerald-500 shadow-sm">
@@ -1885,6 +2024,11 @@ function TaxDashboardContent() {
         {/* TVA 3517-S Tab */}
         <TabsContent value="formulaire-tva" className="space-y-6">
           <FormulaireTVASection settings={settings} />
+        </TabsContent>
+
+        {/* CVAE1 / 1330-SAFE Tab */}
+        <TabsContent value="cvae1" className="space-y-6">
+          <CVAE1Section settings={settings} />
         </TabsContent>
 
         {/* Declarations Tab - TVA & IS */}

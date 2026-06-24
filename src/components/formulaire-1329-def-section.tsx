@@ -38,6 +38,8 @@ import {
   TrendingUp,
   Clock,
   Euro,
+  Sparkles,
+  RefreshCw,
 } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -77,6 +79,15 @@ interface CVAEResult {
   cessation_2026: boolean
 }
 
+interface AutoCalc {
+  chiffreAffaires: number
+  servicesExterieurs: number
+  valeurAjoutee: number
+  chargesExclues: number
+  nombreTransactions: number
+  periodeLabel: string
+}
+
 interface Data {
   year: number
   calculation: CVAEResult
@@ -94,14 +105,17 @@ interface Data {
   }
   form: { id: string; status: string; reference: string | null; filedAt: string | null } | null
   deadline: { dueDate: string; daysUntilDue: number; isOverdue: boolean }
+  autoCalc: AutoCalc | null
 }
 
 export function Formulaire1329DEFSection({ settings }: Formulaire1329DEFSectionProps) {
-  const [year, setYear] = useState(2025)
+  const currentYear = new Date().getFullYear()
+  const [year, setYear] = useState(currentYear - 1) // Default: most recent FY (CVAE due May of currentYear)
   const [data, setData] = useState<Data | null>(null)
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
 
+  // Editable inputs (auto-filled from transactions)
   const [caHT, setCaHT] = useState('')
   const [va, setVa] = useState('')
   const [effectifs, setEffectifs] = useState(0)
@@ -114,6 +128,8 @@ export function Formulaire1329DEFSection({ settings }: Formulaire1329DEFSectionP
   const [acompteContrib, setAcompteContrib] = useState('')
   const [reference, setReference] = useState('')
   const [filedAt, setFiledAt] = useState(new Date().toISOString().split('T')[0])
+  // Track whether CA/VA are auto-filled or manually overridden
+  const [autoFilled, setAutoFilled] = useState(true)
 
   const fetchData = useCallback(async () => {
     setLoading(true)
@@ -122,8 +138,21 @@ export function Formulaire1329DEFSection({ settings }: Formulaire1329DEFSectionP
       if (!res.ok) throw new Error('Erreur API')
       const d: Data = await res.json()
       setData(d)
-      setCaHT(d.inputs.caHT?.toString() || '')
-      setVa(d.inputs.valeurAjoutee?.toString() || '')
+
+      // Auto-fill CA and VA from transactions (or saved form values)
+      const autoCA = d.autoCalc?.chiffreAffaires ?? 0
+      const autoVA = d.autoCalc?.valeurAjoutee ?? 0
+      const savedCA = d.inputs.caHT ?? 0
+      const savedVA = d.inputs.valeurAjoutee ?? 0
+
+      // Use saved values if form exists, otherwise use auto-calculated
+      const useCA = d.form ? savedCA : autoCA
+      const useVA = d.form ? savedVA : autoVA
+
+      setCaHT(useCA ? useCA.toString() : '')
+      setVa(useVA ? useVA.toString() : '')
+      setAutoFilled(!d.form) // If no saved form, mark as auto-filled
+
       setEffectifs(d.inputs.effectifsSalaries || 0)
       setCessation(d.inputs.cessation2026 || false)
       setLimitationVA(d.inputs.limitationVANonApplicable || false)
@@ -157,6 +186,19 @@ export function Formulaire1329DEFSection({ settings }: Formulaire1329DEFSectionP
     new Date(s).toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' })
 
   const num = (s: string) => (s === '' || isNaN(parseFloat(s)) ? 0 : parseFloat(s))
+
+  // Recalculate from transactions (re-fetch)
+  const recalcFromTransactions = () => {
+    if (data?.autoCalc) {
+      const ac = data.autoCalc
+      setCaHT(ac.chiffreAffaires ? ac.chiffreAffaires.toString() : '')
+      setVa(ac.valeurAjoutee ? ac.valeurAjoutee.toString() : '')
+      setAutoFilled(true)
+      toast.success(`Recalculé depuis ${ac.nombreTransactions} transactions (${ac.periodeLabel})`)
+    } else {
+      toast.info('Aucune transaction trouvée pour cet exercice')
+    }
+  }
 
   const handleSave = async (action: 'save' | 'file') => {
     if (action === 'file' && !reference.trim()) {
@@ -205,6 +247,7 @@ export function Formulaire1329DEFSection({ settings }: Formulaire1329DEFSectionP
   const isFiled = data?.form?.status === 'filed'
   const calc = data?.calculation
   const overdue = data?.deadline?.isOverdue
+  const autoCalc = data?.autoCalc
 
   const Line = ({
     num: n,
@@ -280,14 +323,14 @@ export function Formulaire1329DEFSection({ settings }: Formulaire1329DEFSectionP
                 </Badge>
               )}
               <Select value={year.toString()} onValueChange={(v) => setYear(parseInt(v))}>
-                <SelectTrigger className="w-[160px]">
+                <SelectTrigger className="w-[180px]">
                   <Calendar className="h-4 w-4 mr-2" />
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {[2024, 2025, 2026].map((y) => (
+                  {[currentYear - 2, currentYear - 1, currentYear, currentYear + 1].map((y) => (
                     <SelectItem key={y} value={y.toString()}>
-                      CVAE {y} (dépôt {y + 1})
+                      Exercice {y} (dépôt {y + 1})
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -329,13 +372,72 @@ export function Formulaire1329DEFSection({ settings }: Formulaire1329DEFSectionP
 
       {!loading && calc && (
         <>
+          {/* Auto-calculated breakdown from transactions */}
+          {autoCalc && autoCalc.nombreTransactions > 0 && (
+            <Card className="border-blue-200 bg-blue-50/30">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-lg">
+                  <Sparkles className="h-5 w-5 text-blue-600" />
+                  Données auto-calculées depuis vos transactions
+                </CardTitle>
+                <CardDescription>
+                  Période : <strong>{autoCalc.periodeLabel}</strong> · {autoCalc.nombreTransactions} transactions analysées
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="grid md:grid-cols-3 gap-4 mb-4">
+                  <div className="p-3 bg-white rounded-lg border border-emerald-200">
+                    <div className="flex items-center gap-2 mb-1">
+                      <TrendingUp className="h-4 w-4 text-emerald-600" />
+                      <span className="text-xs font-medium text-emerald-800">Chiffre d'affaires HT</span>
+                    </div>
+                    <p className="text-xl font-bold text-emerald-700">{fmt(autoCalc.chiffreAffaires)}</p>
+                  </div>
+                  <div className="p-3 bg-white rounded-lg border border-amber-200">
+                    <div className="flex items-center gap-2 mb-1">
+                      <Calculator className="h-4 w-4 text-amber-600" />
+                      <span className="text-xs font-medium text-amber-800">Services extérieurs</span>
+                    </div>
+                    <p className="text-xl font-bold text-amber-700">{fmt(autoCalc.servicesExterieurs)}</p>
+                  </div>
+                  <div className="p-3 bg-white rounded-lg border border-blue-300 border-2">
+                    <div className="flex items-center gap-2 mb-1">
+                      <Euro className="h-4 w-4 text-blue-600" />
+                      <span className="text-xs font-medium text-blue-800">Valeur ajoutée</span>
+                    </div>
+                    <p className="text-xl font-bold text-blue-700">{fmt(autoCalc.valeurAjoutee)}</p>
+                  </div>
+                </div>
+                <div className="flex items-center justify-between">
+                  <p className="text-xs text-muted-foreground">
+                    VA = CA − services extérieurs (art. 1586 nonies CGI).
+                    Charges exclues (rémunérations, cotisations, impôts) : {fmt(autoCalc.chargesExclues)}
+                  </p>
+                  <Button variant="outline" size="sm" onClick={recalcFromTransactions} disabled={loading}>
+                    <RefreshCw className="h-3 w-3 mr-1" />
+                    Recalculer
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Inputs */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-lg">
                 <Calculator className="h-5 w-5 text-blue-600" />
                 Données d'entrée
+                {autoFilled && autoCalc && autoCalc.nombreTransactions > 0 && (
+                  <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-300 ml-2">
+                    <Sparkles className="h-3 w-3 mr-1" />
+                    Auto-rempli
+                  </Badge>
+                )}
               </CardTitle>
-              <CardDescription>Saisissez vos chiffres. Le calcul se fait automatiquement.</CardDescription>
+              <CardDescription>
+                CA et VA sont pré-remplis depuis vos transactions. Modifiez-les si besoin (retraitements fiscaux).
+              </CardDescription>
             </CardHeader>
             <CardContent className="grid md:grid-cols-2 gap-4">
               <div className="space-y-2">
@@ -343,16 +445,38 @@ export function Formulaire1329DEFSection({ settings }: Formulaire1329DEFSectionP
                   <TrendingUp className="h-4 w-4 text-emerald-600" />
                   Chiffre d'affaires HT (ligne 01)
                 </Label>
-                <Input id="ca" type="number" step="0.01" value={caHT} onChange={(e) => setCaHT(e.target.value)} placeholder="0" />
-                <p className="text-xs text-muted-foreground">CA période 01/12/{year - 1} → 30/11/{year}</p>
+                <Input
+                  id="ca"
+                  type="number"
+                  step="0.01"
+                  value={caHT}
+                  onChange={(e) => { setCaHT(e.target.value); setAutoFilled(false) }}
+                  placeholder={autoCalc?.chiffreAffaires ? autoCalc.chiffreAffaires.toString() : '0'}
+                  className={autoFilled && autoCalc?.chiffreAffaires ? 'border-blue-300 bg-blue-50/30' : ''}
+                />
+                <p className="text-xs text-muted-foreground">
+                  CA période 01/12/{year - 1} → 30/11/{year}
+                  {autoCalc?.chiffreAffaires ? ` · Auto: ${fmt(autoCalc.chiffreAffaires)}` : ''}
+                </p>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="va" className="flex items-center gap-2">
                   <Euro className="h-4 w-4 text-blue-600" />
                   Valeur ajoutée produite (ligne 05)
                 </Label>
-                <Input id="va" type="number" step="0.01" value={va} onChange={(e) => setVa(e.target.value)} placeholder="0" />
-                <p className="text-xs text-muted-foreground">VA = CA − services extérieurs − achats</p>
+                <Input
+                  id="va"
+                  type="number"
+                  step="0.01"
+                  value={va}
+                  onChange={(e) => { setVa(e.target.value); setAutoFilled(false) }}
+                  placeholder={autoCalc?.valeurAjoutee ? autoCalc.valeurAjoutee.toString() : '0'}
+                  className={autoFilled && autoCalc?.valeurAjoutee ? 'border-blue-300 bg-blue-50/30' : ''}
+                />
+                <p className="text-xs text-muted-foreground">
+                  VA = CA − services extérieurs − achats
+                  {autoCalc?.valeurAjoutee ? ` · Auto: ${fmt(autoCalc.valeurAjoutee)}` : ''}
+                </p>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="eff" className="flex items-center gap-2">
@@ -389,11 +513,11 @@ export function Formulaire1329DEFSection({ settings }: Formulaire1329DEFSectionP
             </CardHeader>
             <CardContent className="space-y-1">
               <div className="text-xs font-bold text-muted-foreground uppercase tracking-wide pt-2 pb-1">Section I — Chiffre d'affaires</div>
-              <Line num="01" label="CA de la période de référence" value={calc.ligne01_CA} />
+              <Line num="01" label="CA de la période de référence" value={num(caHT) || calc.ligne01_CA} />
               <Line num="04" label="% de valeur ajoutée correspondante" value={calc.ligne04_pourcentage_VA} formula="VA / CA (+1/4 si cessation)" />
 
               <div className="text-xs font-bold text-muted-foreground uppercase tracking-wide pt-4 pb-1">Section II — Valeur ajoutée</div>
-              <Line num="05" label="Valeur ajoutée produite" value={calc.ligne05_VA_produite} />
+              <Line num="05" label="Valeur ajoutée produite" value={num(va) || calc.ligne05_VA_produite} />
               {calc.ligne05b_VA_plafonnee !== calc.ligne05_VA_produite && (
                 <Line num="05b" label="VA plafonnée (80% CA services / 85% autres)" value={calc.ligne05b_VA_plafonnee} />
               )}

@@ -17,6 +17,15 @@ interface CVAEDEFResponse {
   inputs: Partial<CVAEInput>
   form: { id: string; status: string; reference: string | null; filedAt: string | null } | null
   deadline: { dueDate: string; daysUntilDue: number; isOverdue: boolean }
+  /** Auto-calculated breakdown from transactions (for dynamic auto-fill) */
+  autoCalc: {
+    chiffreAffaires: number
+    servicesExterieurs: number
+    valeurAjoutee: number
+    chargesExclues: number
+    nombreTransactions: number
+    periodeLabel: string
+  } | null
 }
 
 export async function GET(request: NextRequest) {
@@ -69,6 +78,14 @@ export async function GET(request: NextRequest) {
           }
         : null,
       deadline: { dueDate: dueDate.toISOString(), daysUntilDue, isOverdue },
+      autoCalc: {
+        chiffreAffaires: vaCalc.chiffreAffaires,
+        servicesExterieurs: vaCalc.servicesExterieurs,
+        valeurAjoutee: vaCalc.valeurAjoutee,
+        chargesExclues: vaCalc.chargesExclues,
+        nombreTransactions: vaCalc.nombreTransactions,
+        periodeLabel: vaCalc.periodeLabel,
+      },
     }
 
     return NextResponse.json(response)

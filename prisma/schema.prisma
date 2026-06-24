@@ -650,6 +650,7 @@ model Formulaire1329DEF {
 
   // Métadonnées
   cessation_2026                Boolean @default(false)
+  exonere_taxe_additionnelle    Boolean @default(false) // Case: exonéré taxe additionnelle (artisans, coopératives, etc.)
   effectifsSalaries             Int     @default(0)
   periodeLabel                  String  @default("")
   reference_teletransmission    String?

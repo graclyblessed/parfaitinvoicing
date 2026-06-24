@@ -6,15 +6,22 @@
 //   - Art. 1586 octies du CGI : barème et taux de la CVAE
 //   - Art. 1586 decies du CGI : taxe additionnelle (frais CCI)
 //   - Formulaire 1329-DEF applicable au 01/01/2025
+//   - Notice officielle 1329-DEF (impots.gouv.fr)
 //
 // IMPORTANT : La CVAE n'est PAS supprimée. Suppression reportée à 2030.
-//   - 2025 : taux maximal 0,19 %
-//   - 2026-2027 : taux maximal 0,28 %
-//   - 2028 : taux maximal 0,19 %
-//   - 2029 : taux maximal 0,09 %
-//   - 2030 : suppression
 //
-// Contribution complémentaire de 47,4 % : dispositif EXCEPTIONNEL 2025 uniquement.
+// BARÈME 2025 (taux effectif selon CA HT) — 4 tranches :
+//   - CA ≤ 500 000 €              : 0 %
+//   - 500 000 € < CA ≤ 3 M€       : 0,063 % × (CA − 500 000) / 2 500 000
+//   - 3 M€ < CA ≤ 10 M€           : [0,113 % × (CA − 3 M) / 7 M] + 0,063 %
+//   - 10 M€ < CA ≤ 50 M€          : [0,013 % × (CA − 10 M) / 40 M] + 0,175 %
+//   - CA > 50 M€                  : 0,19 % (taux maximal)
+//
+// DÉGRÈVEMENT 2025 : 125 € si CA < 2 M€ (ligne 10, auto-calculé)
+// FRANCHISE : CVAE non due si ≤ 63 € (ligne 11 → 0)
+// PLAFOND VA : 80 % du CA si CA ≤ 7,6 M€ ; 85 % si CA > 7,6 M€ (ligne 06)
+// TAXE ADDITIONNELLE : 13,84 % de la ligne 11 (9,23 % si cessation 2026)
+// CONTRIBUTION COMPLÉMENTAIRE : 47,4 % de la ligne 11 (2025 uniquement, sauf cessation)
 
 /** Arrondi à l'entier le plus proche (les montants CVAE sont en euros entiers) */
 export function roundEuro(value: number): number {
@@ -32,60 +39,61 @@ export function round2(value: number): number {
 
 export const CVAE_CONSTANTS_2025 = {
   annee: 2025,
-  taux_cvae_max: 0.0019, // 0,19 % (taux maximal 2025)
+  taux_cvae_max: 0.0019, // 0,19 % (taux maximal pour CA > 50 M€)
   franchise_cvae_euros: 63, // CVAE non due si ≤ 63 €
+  degrevement_euros: 125, // Dégrèvement si CA < 2 M€ (2025)
+  seuil_degrevement_ca_ht: 2000000, // 2 M€
   seuil_obligation_declarative_ca_ht: 152500,
   seuil_imposition_effective_ca_ht: 500000,
+  // Barème par tranches
+  tranches_bareme: [
+    { plafondCA: 500000, tauxBase: 0, tauxPente: 0, seuilBas: 0, largeurTranche: 0 },
+    { plafondCA: 3000000, tauxBase: 0, tauxPente: 0.00063, seuilBas: 500000, largeurTranche: 2500000 },
+    { plafondCA: 10000000, tauxBase: 0.00063, tauxPente: 0.00113, seuilBas: 3000000, largeurTranche: 7000000 },
+    { plafondCA: 50000000, tauxBase: 0.00175, tauxPente: 0.00013, seuilBas: 10000000, largeurTranche: 40000000 },
+    { plafondCA: Infinity, tauxBase: 0.0019, tauxPente: 0, seuilBas: 50000000, largeurTranche: 0 },
+  ],
   taxe_additionnelle_taux: 0.1384, // 13,84 % (frais CCI)
   taxe_additionnelle_taux_cessation_2026: 0.0923, // 9,23 % si cessation
   contribution_complementaire_taux: 0.474, // 47,4 % (2025 uniquement)
   contribution_complementaire_active: true,
-  plafond_va_services: 0.80, // VA plafonnée à 80 % du CA (services)
-  plafond_va_autres: 0.85, // VA plafonnée à 85 % du CA (autres)
+  // Plafond VA basé sur le CA (PAS sur le type d'activité)
+  plafond_va_ca_bas: 0.80, // 80 % si CA ≤ 7,6 M€
+  plafond_va_ca_haut: 0.85, // 85 % si CA > 7,6 M€
+  seuil_plafond_va_ca: 7600000, // 7,6 M€
   suppression_cvae_prevue: 2030,
-  trajectoire_taux_max: {
-    2025: 0.0019,
-    2026: 0.0028,
-    2027: 0.0028,
-    2028: 0.0019,
-    2029: 0.0009,
-  },
 } as const
 
 // ============================================================================
-// BARÈME PROGRESSIF DE LA CVAE
+// BARÈME PROGRESSIF DE LA CVAE (4 tranches + palier)
 // ============================================================================
-// Le taux effectif de CVAE dépend du chiffre d'affaires HT :
-//   - CA ≤ 500 000 € : 0 % (pas d'imposition effective)
-//   - 500 000 € < CA < 7 600 000 € : taux progressif de 0 % à taux_max
-//   - CA ≥ 7 600 000 € : taux_max (plat)
-//
-// Formule du taux effectif (pour 500k < CA < 7.6M) :
-//   taux = taux_max × (CA - 500 000) / (7 600 000 - 500 000)
-//        = taux_max × (CA - 500 000) / 7 100 000
 
 /**
  * Calcule le taux effectif de CVAE en fonction du chiffre d'affaires HT.
+ * Barème 2025 (loi de finances 2025) :
+ *   - CA ≤ 500 000 €              : 0 %
+ *   - 500 000 € < CA ≤ 3 M€       : 0,063 % × (CA − 500 000) / 2 500 000
+ *   - 3 M€ < CA ≤ 10 M€           : [0,113 % × (CA − 3 M) / 7 M] + 0,063 %
+ *   - 10 M€ < CA ≤ 50 M€          : [0,013 % × (CA − 10 M) / 40 M] + 0,175 %
+ *   - CA > 50 M€                  : 0,19 %
+ *
  * @param caHT Chiffre d'affaires HT
- * @param annee Année d'imposition (pour sélectionner le taux max)
- * @returns Taux effectif (ex: 0.00016 pour 0,016 %)
+ * @returns Taux effectif (ex: 0.0001512 pour 0,01512 %)
  */
-export function calculerTauxEffectifCVAE(caHT: number, annee: number = 2025): number {
-  const tauxMax =
-    CVAE_CONSTANTS_2025.trajectoire_taux_max[annee as keyof typeof CVAE_CONSTANTS_2025.trajectoire_taux_max] ??
-    CVAE_CONSTANTS_2025.taux_cvae_max
+export function calculerTauxEffectifCVAE(caHT: number): number {
+  const tranches = CVAE_CONSTANTS_2025.tranches_bareme
 
-  const seuilBas = CVAE_CONSTANTS_2025.seuil_imposition_effective_ca_ht // 500 000
-  const seuilHaut = 7600000 // 7,6 M€
-
-  if (caHT <= seuilBas) {
-    return 0 // Pas d'imposition effective
+  for (const t of tranches) {
+    if (caHT <= t.plafondCA) {
+      if (t.tauxPente === 0) {
+        return t.tauxBase // Tranche à 0 % ou palier final à 0,19 %
+      }
+      // Tranche progressive : tauxBase + tauxPente × (CA − seuilBas) / largeurTranche
+      return t.tauxBase + (t.tauxPente * (caHT - t.seuilBas)) / t.largeurTranche
+    }
   }
-  if (caHT >= seuilHaut) {
-    return tauxMax // Taux maximal plat
-  }
-  // Barème progressif
-  return tauxMax * ((caHT - seuilBas) / (seuilHaut - seuilBas))
+  // Ne devrait jamais être atteint (dernière tranche = Infinity)
+  return CVAE_CONSTANTS_2025.taux_cvae_max
 }
 
 // ============================================================================
@@ -94,23 +102,38 @@ export function calculerTauxEffectifCVAE(caHT: number, annee: number = 2025): nu
 
 /**
  * Applique le plafonnement de la VA.
- * La VA ne peut pas dépasser 80 % du CA (entreprises de services) ou 85 % (autres).
+ * La VA ne peut pas dépasser 80 % du CA (si CA ≤ 7,6 M€) ou 85 % (si CA > 7,6 M€).
+ * Certaines entreprises (caractère financier) sont dispensées — case L06.
+ *
  * @param va Valeur ajoutée produite
  * @param caHT Chiffre d'affaires HT
- * @param isServices true si entreprise de services (plafond 80%), false sinon (85%)
  * @param limitationNonApplicable true si la case L06 est cochée (plafonnement non applicable)
  */
 export function plafonnerVA(
   va: number,
   caHT: number,
-  isServices: boolean = true,
   limitationNonApplicable: boolean = false
 ): number {
   if (limitationNonApplicable) return va
-  const plafond = isServices
-    ? CVAE_CONSTANTS_2025.plafond_va_services * caHT
-    : CVAE_CONSTANTS_2025.plafond_va_autres * caHT
+  const plafond =
+    caHT <= CVAE_CONSTANTS_2025.seuil_plafond_va_ca
+      ? CVAE_CONSTANTS_2025.plafond_va_ca_bas * caHT
+      : CVAE_CONSTANTS_2025.plafond_va_ca_haut * caHT
   return Math.min(va, plafond)
+}
+
+// ============================================================================
+// CALCUL DU DÉGRÈVEMENT (ligne 10)
+// ============================================================================
+
+/**
+ * Calcule le dégrèvement de 125 € applicable si CA < 2 M€ (année 2025).
+ * Ce dégrèvement est positionné sur la ligne 10 (réduction supplémentaire).
+ */
+export function calculerDegrevement(caHT: number): number {
+  return caHT < CVAE_CONSTANTS_2025.seuil_degrevement_ca_ht
+    ? CVAE_CONSTANTS_2025.degrevement_euros
+    : 0
 }
 
 // ============================================================================
@@ -118,9 +141,9 @@ export function plafonnerVA(
 // ============================================================================
 
 export interface CVAEInput {
-  /** Chiffre d'affaires HT de la période de référence (ligne 01) */
+  /** Chiffre d'affaires HT de la période de référence (ligne 01) — À SAISIR */
   caHT: number
-  /** Valeur ajoutée produite (ligne 05) */
+  /** Valeur ajoutée produite (ligne 05) — À SAISIR (reprendre 2059-E ligne SA ou 2033-E ligne 117) */
   valeurAjoutee: number
   /** Effectifs salariés (déclarés simultanément) */
   effectifsSalaries: number
@@ -128,19 +151,17 @@ export interface CVAEInput {
   annee?: number
   /** Cessation d'activité en 2026 (modifie les taux) */
   cessation2026?: boolean
-  /** Case L06 : limitation VA non applicable */
+  /** Case L06 : limitation VA non applicable (entreprises financières) */
   limitationVANonApplicable?: boolean
-  /** Entreprise de services (plafond VA 80%) ou autre (85%) */
-  isServices?: boolean
-  /** Exonérations (ligne 09) — saisie manuelle */
+  /** Exonération de la taxe additionnelle (artisans non CCI, coopératives, etc.) */
+  exonereTaxeAdditionnelle?: boolean
+  /** Exonérations de plein droit (ligne 09) — seulement si concerné */
   exonerations?: number
-  /** Réduction supplémentaire (ligne 10) — saisie manuelle */
-  reductionSupplementaire?: number
-  /** Acomptes CVAE versés (ligne 12) — juin + septembre */
+  /** Acomptes CVAE versés (ligne 12) — À SAISIR (relevés 1329-AC juin + septembre) */
   acomptesCVAE?: number
-  /** Acomptes taxe additionnelle versés (ligne 16) */
+  /** Acomptes taxe additionnelle versés (ligne 16) — À SAISIR */
   acomptesTaxeAdd?: number
-  /** Acompte contribution complémentaire versé (ligne 21) — 100 % en sept 2025 */
+  /** Acompte contribution complémentaire versé (ligne 21) — À SAISIR (100 % en sept 2025) */
   acompteContribCompl?: number
 }
 
@@ -156,7 +177,7 @@ export interface CVAEResult {
   // Section III : Cotisation
   ligne08_cotisation_avant_reduction: number
   ligne09_exonerations: number
-  ligne10_reduction_supplementaire: number
+  ligne10_reduction_supplementaire: number // Dégrèvement 125 € (auto)
   ligne11_CVAE_due: number
   ligne12_acomptes_CVAE: number
   ligne13_solde_CVAE_payer: number
@@ -180,32 +201,41 @@ export interface CVAEResult {
   // Méta
   taux_effectif: number
   franchise_appliquee: boolean
+  degrevement_applique: boolean
   cessation_2026: boolean
+  exonere_taxe_additionnelle: boolean
 }
 
 /**
  * Calcule l'intégralité du formulaire 1329-DEF.
  *
- * Logique :
- * 1. VA produite (L05) → plafonnée à 80%/85% du CA (sauf case L06)
- * 2. Taux effectif selon CA (barème progressif)
- * 3. CVAE brute (L07) = VA plafonnée × taux effectif
- * 4. CVAE due (L11) = L08 - L09 - L10 ; si ≤ 63 € → 0 (franchise)
- * 5. Taxe additionnelle (L15) = L11 × 13,84 % (ou 9,23 % si cessation)
- * 6. Contribution complémentaire (L20) = L11 × 47,4 % (2025 uniquement, sauf cessation)
- * 7. Soldes / excédents par section
- * 8. Total à payer (L27) ou excédent (L28)
+ * CHAMPS À SAISIR par l'utilisateur (tout le reste est auto-calculé) :
+ *   - Ligne 01 : CA HT
+ *   - Ligne 05 : Valeur ajoutée produite
+ *   - Ligne 12 : Acomptes CVAE versés
+ *   - Ligne 16 : Acomptes taxe additionnelle versés
+ *   - Ligne 21 : Acompte contribution complémentaire versé
+ *
+ * CALCUL AUTO :
+ *   - Ligne 04 : % VA = VA / CA (+1/4 si cessation)
+ *   - Ligne 06 : Plafond VA (80% si CA ≤ 7,6M€, 85% sinon)
+ *   - Ligne 07 : CVAE brute = VA plafonnée × taux effectif
+ *   - Ligne 08 : Cotisation avant réduction = L07
+ *   - Ligne 10 : Dégrèvement 125 € si CA < 2 M€ (2025)
+ *   - Ligne 11 : CVAE due = L08 - L09 - L10 ; 0 si ≤ 63 € (franchise)
+ *   - Ligne 15 : Taxe add = L11 × 13,84 % (ou 9,23 % si cessation)
+ *   - Ligne 20 : Contribution compl = L11 × 47,4 % (2025 uniquement, sauf cessation)
+ *   - Lignes 13/14, 17/18, 22/23 : Soldes / excédents
+ *   - Lignes 24-28 : Totaux
  */
 export function calculerCVAE(input: CVAEInput): CVAEResult {
   const {
     caHT,
     valeurAjoutee,
-    annee = 2025,
     cessation2026 = false,
     limitationVANonApplicable = false,
-    isServices = true,
+    exonereTaxeAdditionnelle = false,
     exonerations = 0,
-    reductionSupplementaire = 0,
     acomptesCVAE = 0,
     acomptesTaxeAdd = 0,
     acompteContribCompl = 0,
@@ -219,16 +249,11 @@ export function calculerCVAE(input: CVAEInput): CVAEResult {
 
   // --- Section II : VA ---
   const ligne05_VA_produite = valeurAjoutee
-  const ligne05b_VA_plafonnee = plafonnerVA(
-    valeurAjoutee,
-    caHT,
-    isServices,
-    limitationVANonApplicable
-  )
+  const ligne05b_VA_plafonnee = plafonnerVA(valeurAjoutee, caHT, limitationVANonApplicable)
   const ligne06_limitation_non_applicable = limitationVANonApplicable
 
-  // Taux effectif
-  const taux_effectif = calculerTauxEffectifCVAE(caHT, annee)
+  // Taux effectif selon le barème 2025
+  const taux_effectif = calculerTauxEffectifCVAE(caHT)
 
   // Ligne 07 : CVAE brute = VA plafonnée × taux effectif
   const ligne07_CVAE_brute = roundEuro(ligne05b_VA_plafonnee * taux_effectif)
@@ -236,7 +261,10 @@ export function calculerCVAE(input: CVAEInput): CVAEResult {
   // --- Section III : Cotisation ---
   const ligne08_cotisation_avant_reduction = ligne07_CVAE_brute
   const ligne09_exonerations = exonerations
-  const ligne10_reduction_supplementaire = reductionSupplementaire
+
+  // Ligne 10 : Dégrèvement de 125 € si CA < 2 M€ (2025) — auto-calculé
+  const degrevement = calculerDegrevement(caHT)
+  const ligne10_reduction_supplementaire = degrevement
 
   // Ligne 11 : CVAE due = L08 - L09 - L10 ; franchise 63 €
   const cvaeDueCalculee = ligne08_cotisation_avant_reduction - ligne09_exonerations - ligne10_reduction_supplementaire
@@ -252,7 +280,8 @@ export function calculerCVAE(input: CVAEInput): CVAEResult {
   const tauxTaxeAdd = cessation2026
     ? CVAE_CONSTANTS_2025.taxe_additionnelle_taux_cessation_2026
     : CVAE_CONSTANTS_2025.taxe_additionnelle_taux
-  const ligne15_taxe_add_due = roundEuro(ligne11_CVAE_due * tauxTaxeAdd)
+  // Si exonéré de taxe additionnelle → 0
+  const ligne15_taxe_add_due = exonereTaxeAdditionnelle ? 0 : roundEuro(ligne11_CVAE_due * tauxTaxeAdd)
   const ligne16_acomptes_taxe_add = acomptesTaxeAdd
   const ligne17_solde_taxe_add_payer = Math.max(0, ligne15_taxe_add_due - ligne16_acomptes_taxe_add)
   const ligne18_excedent_taxe_add = Math.max(0, ligne16_acomptes_taxe_add - ligne15_taxe_add_due)
@@ -280,7 +309,7 @@ export function calculerCVAE(input: CVAEInput): CVAEResult {
     ligne04_pourcentage_VA: round2(ligne04_pourcentage_VA * 100), // en %
     ligne05_VA_produite,
     ligne05b_VA_plafonnee,
-    ligne06_limitation_non_applicable: ligne06_limitation_non_applicable,
+    ligne06_limitation_non_applicable,
     ligne07_CVAE_brute,
     ligne08_cotisation_avant_reduction,
     ligne09_exonerations,
@@ -304,7 +333,9 @@ export function calculerCVAE(input: CVAEInput): CVAEResult {
     ligne28_excedent_versement,
     taux_effectif: round2(taux_effectif * 100), // en %
     franchise_appliquee,
+    degrevement_applique: degrevement > 0,
     cessation_2026: cessation2026,
+    exonere_taxe_additionnelle: exonereTaxeAdditionnelle,
   }
 }
 

@@ -31,6 +31,7 @@ import { TaxPaymentsSection } from '@/components/tax-payments-section'
 import { DevisSection } from '@/components/devis-section'
 import { CVAE1Section } from '@/components/cvae1-section'
 import { AnnualObligationsSection } from '@/components/annual-obligations-section'
+import { Formulaire1329DEFSection } from '@/components/formulaire-1329-def-section'
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from '@/components/ui/chart'
 import { Bar, BarChart, XAxis, YAxis, CartesianGrid, Line, LineChart as RechartsLineChart, ResponsiveContainer, Area, AreaChart } from 'recharts'
 
@@ -691,6 +692,12 @@ function TaxDashboardContent() {
           <TabsTrigger value="cvae1">
             <span className="relative">
               CVAE1 (1330-SAFE)
+              <span className="absolute -top-1.5 -right-2 h-2 w-2 rounded-full bg-rose-500" />
+            </span>
+          </TabsTrigger>
+          <TabsTrigger value="1329-def">
+            <span className="relative">
+              1329-DEF (CVAE)
               <span className="absolute -top-1.5 -right-2 h-2 w-2 rounded-full bg-rose-500" />
             </span>
           </TabsTrigger>
@@ -2029,6 +2036,11 @@ function TaxDashboardContent() {
         {/* CVAE1 / 1330-SAFE Tab */}
         <TabsContent value="cvae1" className="space-y-6">
           <CVAE1Section settings={settings} />
+        </TabsContent>
+
+        {/* 1329-DEF — Liquidation CVAE Tab */}
+        <TabsContent value="1329-def" className="space-y-6">
+          <Formulaire1329DEFSection settings={settings} />
         </TabsContent>
 
         {/* Declarations Tab - TVA & IS */}

@@ -505,7 +505,7 @@ export function Formulaire1329DEFSection({ settings }: Formulaire1329DEFSectionP
                   line="01"
                   label="Montant du chiffre d'affaires de la période de référence"
                   type="saisir"
-                  where="Liasse fiscale 2025 / déclaration de résultat · Période 01/12/{year-1} → 30/11/{year}".replace('{year}', String(year)).replace('{year-1}', String(year - 1))}
+                  where={`Liasse fiscale 2025 / déclaration de résultat · Période 01/12/${year - 1} → 30/11/${year}`}
                 >
                   <Input
                     type="number"

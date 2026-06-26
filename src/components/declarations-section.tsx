@@ -15,6 +15,7 @@ import {
   CheckCircle, Info, Calendar, Paperclip, X, Eye
 } from 'lucide-react'
 import { toast } from 'sonner'
+import { toHT } from '@/lib/ht-ttc'
 
 interface Settings {
   companyName: string
@@ -146,19 +147,27 @@ export function DeclarationsSection({ settings }: DeclarationsSectionProps) {
         }
 
         if (t.amount > 0) {
-          fyData[fy].income += t.amount
-          // Income TVA: use category rate with TTC formula (default 0.20 for income)
+          // Income: convert TTC → HT using regime-aware toHT()
+          // Under franchise en base: amount is already HT (no VAT collected)
+          // Under reel: strip VAT to get HT
           const inRate = t.category?.defaultTvaRate ?? 0.20
-          if (inRate > 0) {
-            fyData[fy].tvaCollectee += t.amount * inRate / (1 + inRate)
+          const incomeHT = toHT(t.amount, inRate, settings?.vatRegime)
+          fyData[fy].income += incomeHT
+          // TVA collectée (only under reel — franchise doesn't collect VAT)
+          if (inRate > 0 && settings?.vatRegime !== 'franchise') {
+            fyData[fy].tvaCollectee += incomeHT * inRate
           }
         } else {
-          fyData[fy].expenses += Math.abs(t.amount)
-          // Expense TVA déductible: use category rate (default 0 for expenses)
+          // Expense: convert TTC → HT using regime-aware toHT()
+          // Under franchise en base: expense stays TTC (non-recoverable VAT)
+          // Under reel: strip recoverable VAT to get HT
           const expRate = t.category?.defaultTvaRate ?? 0
           const isDeductible = t.category?.taxDeductible ?? true
-          if (isDeductible && expRate > 0) {
-            fyData[fy].tvaDeductible += Math.abs(t.amount) * expRate / (1 + expRate)
+          const expenseHT = toHT(t.amount, expRate, settings?.vatRegime)
+          fyData[fy].expenses += expenseHT
+          // TVA déductible (only under reel — franchise can't recover VAT)
+          if (isDeductible && expRate > 0 && settings?.vatRegime !== 'franchise') {
+            fyData[fy].tvaDeductible += expenseHT * expRate
           }
         }
       })

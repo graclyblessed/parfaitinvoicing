@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { mapLiasseTo2033A, mapLiasseTo2033B, mapLiasseTo2033E } from '@/lib/liasse-pdf-lines'
+import { toHT } from '@/lib/ht-ttc'
 
 // Category to Liasse field mapping
 const CATEGORY_TO_LIASSE: Record<string, {
@@ -227,12 +228,14 @@ export async function POST(request: NextRequest) {
     const categoryBreakdown: Record<string, { count: number; total: number; field: string }> = {}
 
     // Process each transaction - convert TTC to HT for liasse fiscale
+    // Using regime-aware toHT() — under franchise en base, amount is already HT
+    // (no VAT collected); under reel, strip recoverable VAT.
+    const vatRegime = settings?.vatRegime || 'franchise'
     for (const t of transactions) {
       const catName = t.category?.name || 'Non catégorisé'
       const amountTTC = Math.abs(t.amount)
-      // BUG-007 FIX: Use 0 for uncategorized expenses, not 0.20
       const tvaRate = t.category?.defaultTvaRate ?? 0
-      const amountHT = Math.round((amountTTC / (1 + tvaRate)) * 100) / 100
+      const amountHT = toHT(amountTTC, tvaRate, vatRegime)
       
       // Track category breakdown (in HT)
       if (!categoryBreakdown[catName]) {

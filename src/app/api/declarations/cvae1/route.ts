@@ -60,18 +60,22 @@ export async function GET(request: NextRequest) {
       include: { category: true },
     })
 
+    // Fetch company settings to get the VAT regime (franchise / reel_simplifie / reel_normal)
+    const settings = await db.settings.findFirst()
+    const vatRegime = settings?.vatRegime || 'franchise'
+
     // Fetch the existing CVAE1 declaration (if any)
-    // Convention: period = "CVAE1-{fyEndYear}"
     const period = `CVAE1-${fyEndYear}`
     const existing = await db.declaration.findUnique({
       where: { type_year_period: { type: 'CVAE1', year: fyEndYear, period } },
     })
 
-    // Calculate valeur ajoutée
+    // Calculate valeur ajoutée (regime-aware HT conversion)
     const calculation = calculateValeurAjoutee({
       transactions,
       fyEndYear,
-      effectifsSalaries: 0, // will be overridden below if declaration exists
+      effectifsSalaries: 0,
+      vatRegime,
     })
 
     // If declaration exists, use its stored effectifs
@@ -89,6 +93,16 @@ export async function GET(request: NextRequest) {
     const dueDate = getCVAE1Deadline(fyEndYear)
     const daysUntil = daysUntilCVAE1(fyEndYear)
     const overdue = isCVAE1Overdue(fyEndYear)
+
+    // CVAE applicability check: 1330-SAFE is required only when CA > 152,500 €
+    // (CGI art. 1586 octies). Below that, the declaration is not mandatory,
+    // but we still compute values + allow filing (soft warning) because the
+    // DGFiP may have sent a mise en demeure regardless.
+    const SEUIL_OBLIGATION_DECLARATIVE = 152500
+    const cvaeNotApplicable = calculation.chiffreAffaires < SEUIL_OBLIGATION_DECLARATIVE
+    const cveApplicabilityWarning = cvaeNotApplicable
+      ? `CA HT (${calculation.chiffreAffaires.toFixed(0)} €) < 152 500 € — la déclaration 1330-SAFE n'est pas obligatoire. Toutefois, vous pouvez la déposer pour régulariser une mise en demeure.`
+      : null
 
     const response: CVAE1DeclarationResponse = {
       fyEndYear,
@@ -152,10 +166,13 @@ export async function POST(request: NextRequest) {
       const transactions = await db.transaction.findMany({
         include: { category: true },
       })
+      const settings = await db.settings.findFirst()
+      const vatRegime = settings?.vatRegime || 'franchise'
       const calc = calculateValeurAjoutee({
         transactions,
         fyEndYear,
         effectifsSalaries,
+        vatRegime,
       })
       valeurAjoutee = calc.valeurAjoutee
     }

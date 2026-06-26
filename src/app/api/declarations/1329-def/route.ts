@@ -39,7 +39,9 @@ export async function GET(request: NextRequest) {
     }
 
     const transactions = await db.transaction.findMany({ include: { category: true } })
-    const vaCalc = calculateValeurAjoutee({ transactions, fyEndYear: year, effectifsSalaries: 0 })
+    const settings = await db.settings.findFirst()
+    const vatRegime = settings?.vatRegime || 'franchise'
+    const vaCalc = calculateValeurAjoutee({ transactions, fyEndYear: year, effectifsSalaries: 0, vatRegime })
 
     const existing = await db.formulaire1329DEF.findUnique({ where: { year } })
 

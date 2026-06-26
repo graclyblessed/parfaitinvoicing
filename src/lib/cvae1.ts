@@ -10,6 +10,11 @@
 //   1. Calculer le plafonnement de la CFE (basé sur la valeur ajoutée)
 //   2. Déclarer les effectifs salariés (utilisé pour les seuils TVA, etc.)
 //
+// HT/TTC : All amounts are converted to HT using the regime-aware toHT() helper.
+//   - Franchise en base: amount is already HT (no VAT collected on sales);
+//     expenses stay TTC (non-recoverable VAT is part of cost).
+//   - Reel: strip recoverable VAT to get HT.
+//
 // Formule officielle simplifiée de la Valeur Ajoutée (art. 1586 nonies CGI) :
 //   VA =  Produits d'exploitation (CA + production stockée + production immobilisée
 //          + subventions d'exploitation + autres produits)
@@ -18,8 +23,7 @@
 //        - Services extérieurs et autres charges externes
 //
 //  Pour une SASU de services (pas de marchandises/stocks), cela se ramène à :
-//   VA ≈ Chiffre d'affaires - Services extérieurs (loyers, honoraires, fournitures,
-//          logiciels, télécom, assurances, frais de déplacement, etc.)
+//   VA ≈ Chiffre d'affaires HT - Services extérieurs HT (loyers, honoraires, etc.)
 //
 //  NE SONT PAS déduits de la VA :
 //   - Rémunérations et cotisations sociales (charges de personnel)
@@ -27,6 +31,8 @@
 //   - Dotations aux amortissements et provisions
 //   - Charges financières et exceptionnelles
 //   - Dividendes
+
+import { toHT } from './ht-ttc'
 
 import type { TaxDeadlineType } from './tax'
 
@@ -53,6 +59,8 @@ export interface VAEffectifsInput {
   fyEndMonth?: number
   /** Effectifs salariés (moyenne annuelle) — saisi manuellement par l'utilisateur */
   effectifsSalaries?: number
+  /** Régime de TVA de l'entreprise (de Settings.vatRegime) — détermine la conversion TTC→HT */
+  vatRegime?: string
 }
 
 export interface VAEffectifsResult {
@@ -101,14 +109,12 @@ export function isDeductibleFromVA(category: {
  *   la période est du 01/12/2024 au 30/11/2025.
  */
 export function calculateValeurAjoutee(input: VAEffectifsInput): VAEffectifsResult {
-  const { transactions, fyEndYear, effectifsSalaries = 0 } = input
+  const { transactions, fyEndYear, effectifsSalaries = 0, vatRegime } = input
   const fyEndMonth = input.fyEndMonth ?? 11
 
   // Bornes de l'exercice fiscal
-  // Début : 1er du mois SUIVANT la fin d'exercice de l'année précédente
-  // Fin : dernier jour du mois de fin d'exercice de l'année courante
   const fyStart = new Date(fyEndYear - 1, fyEndMonth, 1) // ex: 01/12/2024
-  const fyEnd = new Date(fyEndYear, fyEndMonth, 0)       // ex: 30/11/2025 (jour 0 = dernier jour du mois précédent)
+  const fyEnd = new Date(fyEndYear, fyEndMonth, 0)       // ex: 30/11/2025
 
   let chiffreAffaires = 0
   let servicesExterieurs = 0
@@ -120,16 +126,21 @@ export function calculateValeurAjoutee(input: VAEffectifsInput): VAEffectifsResu
     if (date < fyStart || date > fyEnd) continue
     nombreTransactions++
 
+    // Convert TTC → HT using regime-aware toHT()
+    // Franchise en base: amount is already HT (sales) or stays TTC (expenses)
+    // Reel: strip recoverable VAT
+    const tvaRate = t.category?.defaultTvaRate ?? 0
+    const amountHT = toHT(t.amount, tvaRate, vatRegime)
+
     if (t.amount > 0 || t.type === 'income') {
-      // Produit → entre dans le chiffre d'affaires
-      chiffreAffaires += Math.abs(t.amount)
+      // Produit → entre dans le chiffre d'affaires (HT)
+      chiffreAffaires += amountHT
     } else {
       // Charge
-      const amount = Math.abs(t.amount)
       if (isDeductibleFromVA(t.category)) {
-        servicesExterieurs += amount
+        servicesExterieurs += amountHT
       } else {
-        chargesExclues += amount
+        chargesExclues += amountHT
       }
     }
   }

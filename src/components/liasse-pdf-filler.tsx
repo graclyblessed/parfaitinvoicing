@@ -36,9 +36,7 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 
-interface LiassePDFFillerProps {
-  // Optional: allow parent to pass the selected year
-}
+// No props needed — component is self-contained
 
 interface PdfLineValue {
   value: number | boolean
@@ -214,7 +212,7 @@ const FORM_DEFS: FormDef[] = [
   },
 ]
 
-export function LiassePDFFiller({}: LiassePDFFillerProps) {
+export function LiassePDFFiller() {
   const currentYear = new Date().getFullYear()
   const [year, setYear] = useState(currentYear - 1)
   const [pdfLines, setPdfLines] = useState<Record<string, Record<string, number | boolean>> | null>(null)

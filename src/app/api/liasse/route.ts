@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { mapLiasseTo2033A, mapLiasseTo2033B, mapLiasseTo2033E } from '@/lib/liasse-pdf-lines'
 
 // Category to Liasse field mapping
 const CATEGORY_TO_LIASSE: Record<string, {
@@ -54,7 +55,72 @@ export async function GET(request: NextRequest) {
       const liasse = await db.liasseFiscale.findUnique({
         where: { year: parseInt(year) }
       })
-      return NextResponse.json({ liasse })
+
+      // Compute PDF line mappings from the liasse values
+      let pdfLines: Record<string, Record<string, number | boolean>> = {}
+      if (liasse) {
+        const values: Record<string, number> = {
+          immoIncorporelles: liasse.immoIncorporelles,
+          immoCorporelles: liasse.immoCorporelles,
+          immoFinancieres: liasse.immoFinancieres,
+          totalImmo: liasse.totalImmo,
+          stocks: liasse.stocks,
+          creancesClients: liasse.creancesClients,
+          autresCreances: liasse.autresCreances,
+          disponibilites: liasse.disponibilites,
+          totalActifCirculant: liasse.totalActifCirculant,
+          totalActif: liasse.totalActif,
+          capital: liasse.capital,
+          reserves: liasse.reserves,
+          reportANouveau: liasse.reportANouveau,
+          resultatExercice: liasse.resultatExercice,
+          totalCapitauxPropres: liasse.totalCapitauxPropres,
+          emprunts: liasse.emprunts,
+          dettesFournisseurs: liasse.dettesFournisseurs,
+          dettesFiscales: liasse.dettesFiscales,
+          dettesSociales: liasse.dettesSociales,
+          autresDettes: liasse.autresDettes,
+          totalDettes: liasse.totalDettes,
+          totalPassif: liasse.totalPassif,
+          chiffreAffaires: liasse.chiffreAffaires,
+          productionStockee: liasse.productionStockee,
+          productionImmo: liasse.productionImmo,
+          subventions: liasse.subventions,
+          autresProduits: liasse.autresProduits,
+          totalProduits: liasse.totalProduits,
+          achats: liasse.achats,
+          variationStocks: liasse.variationStocks,
+          servicesExterieurs: liasse.servicesExterieurs,
+          chargesPersonnel: liasse.chargesPersonnel,
+          impotsTaxes: liasse.impotsTaxes,
+          dotationsAmort: liasse.dotationsAmort,
+          dotationsProvisions: liasse.dotationsProvisions,
+          chargesFinancieres: liasse.chargesFinancieres,
+          chargesExceptionnelles: liasse.chargesExceptionnelles,
+          totalCharges: liasse.totalCharges,
+          resultatCourant: liasse.resultatCourant,
+          resultatExceptionnel: liasse.resultatExceptionnel,
+          impotSurSocietes: liasse.impotSurSocietes,
+          resultatNet: liasse.resultatNet,
+          effectif: liasse.effectif,
+          valeurAjoutee: liasse.tvaCollectee - liasse.tvaDeductible, // placeholder; real VA computed by CVAE1
+          resultatComptable: liasse.resultatComptable,
+          retraitements: liasse.retraitements,
+          resultatFiscal: liasse.resultatFiscal,
+          chargesDeductibles: liasse.chargesDeductibles,
+          deficitAnterieur: liasse.deficitAnterieur,
+          deficitUtilise: liasse.deficitUtilise,
+          baseImposableIS: liasse.baseImposableIS,
+          isAPayer: liasse.isAPayer,
+        }
+        pdfLines = {
+          '2033-A': mapLiasseTo2033A(values as any),
+          '2033-B': mapLiasseTo2033B(values as any),
+          '2033-E': mapLiasseTo2033E(values as any, liasse.effectif),
+        }
+      }
+
+      return NextResponse.json({ liasse, pdfLines })
     }
 
     const liasses = await db.liasseFiscale.findMany({

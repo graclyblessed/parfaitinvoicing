@@ -24,6 +24,7 @@ import {
   BarChart3, LineChart, Wallet, Percent
 } from 'lucide-react'
 import { LiasseFiscaleSection } from '@/components/liasse-fiscale-section'
+import { LiassePDFFiller } from '@/components/liasse-pdf-filler'
 import { DeclarationsSection } from '@/components/declarations-section'
 import { FormulaireISSection } from '@/components/formulaire-is-section'
 import { FormulaireTVASection } from '@/components/formulaire-tva-section'
@@ -2020,6 +2021,8 @@ function TaxDashboardContent() {
 
         {/* Liasse Fiscale Tab */}
         <TabsContent value="liasse" className="space-y-6">
+          <LiassePDFFiller />
+          <Separator className="my-8" />
           <LiasseFiscaleSection settings={settings} transactions={transactions} />
         </TabsContent>
 

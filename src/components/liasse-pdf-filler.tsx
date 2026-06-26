@@ -300,7 +300,7 @@ export function LiassePDFFiller() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {[currentYear - 2, currentYear - 1, currentYear, currentYear + 1].map((y) => (
+                  {Array.from({ length: currentYear - 2022 + 2 }, (_, i) => 2022 + i).map((y) => (
                     <SelectItem key={y} value={y.toString()}>
                       Exercice {y}
                     </SelectItem>

@@ -364,7 +364,7 @@ export function Formulaire1329DEFSection({ settings }: Formulaire1329DEFSectionP
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {[currentYear - 2, currentYear - 1, currentYear, currentYear + 1].map((y) => (
+                  {Array.from({ length: currentYear - 2022 + 2 }, (_, i) => 2022 + i).map((y) => (
                     <SelectItem key={y} value={y.toString()}>
                       Exercice {y} (dépôt {y + 1})
                     </SelectItem>

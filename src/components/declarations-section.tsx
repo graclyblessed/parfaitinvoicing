@@ -369,7 +369,7 @@ export function DeclarationsSection({ settings }: DeclarationsSectionProps) {
                 onChange={(e) => setSelectedYear(parseInt(e.target.value))}
               >
                 {yearOptions.map(y => (
-                  <option key={y} value={y}>30/11/{y}</option>
+                  <option key={y} value={y}>Exercice {y - 1}-{y} (clos le 30/11/{y})</option>
                 ))}
               </select>
             </div>

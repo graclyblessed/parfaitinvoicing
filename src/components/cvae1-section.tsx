@@ -262,7 +262,7 @@ export function CVAE1Section({ settings }: CVAE1SectionProps) {
                 <SelectContent>
                   {Array.from({ length: currentYear - 2022 + 2 }, (_, i) => 2022 + i).map((y) => (
                     <SelectItem key={y} value={y.toString()}>
-                      Exercice {y} (01/12/{y - 1} → 30/11/{y})
+                      Exercice {y - 1}-{y} (01/12/{y - 1} → 30/11/{y})
                     </SelectItem>
                   ))}
                 </SelectContent>

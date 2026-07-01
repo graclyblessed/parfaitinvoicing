@@ -203,7 +203,7 @@ ${summary.nonDeductible > 0 ? `⚠️ Dépenses non déductibles: ${formatCurren
                 onChange={(e) => setSelectedYear(parseInt(e.target.value))}
               >
                 {[2026, 2025, 2024, 2023, 2022].map(y => (
-                  <option key={y} value={y}>Exercice clos le 30/11/{y}</option>
+                  <option key={y} value={y}>Exercice {y - 1}-{y} (clos le 30/11/{y})</option>
                 ))}
               </select>
             </div>

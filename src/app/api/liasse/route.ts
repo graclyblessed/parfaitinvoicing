@@ -24,6 +24,8 @@ const CATEGORY_TO_LIASSE: Record<string, {
   'Frais de déplacement': { field: 'servicesExterieurs', section: 'charge', line2033: '2033-D G' },
   'Formation': { field: 'servicesExterieur', section: 'charge', line2033: '2033-D G' },
   'Publicité & Marketing': { field: 'servicesExterieurs', section: 'charge', line2033: '2033-D G' },
+  'Publicité et marketing': { field: 'servicesExterieurs', section: 'charge', line2033: '2033-D G' },
+  'Publicité et Marketing': { field: 'servicesExterieurs', section: 'charge', line2033: '2033-D G' },
   'Repas professionnels': { field: 'servicesExterieurs', section: 'charge', line2033: '2033-D G' },
 
   // Expenses - Autres charges

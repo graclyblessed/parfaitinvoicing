@@ -8,42 +8,51 @@ const CATEGORY_TO_LIASSE: Record<string, {
   field: string
   section: 'produit' | 'charge' | 'actif' | 'passif'
   line2033?: string
+  exclude?: boolean  // If true, transaction is excluded from liasse (loans, capital movements)
 }> = {
   // Income
   'Prestations de services': { field: 'chiffreAffaires', section: 'produit', line2033: '2033-D A' },
   'Ventes de produits': { field: 'chiffreAffaires', section: 'produit', line2033: '2033-D A' },
   'Autres revenus': { field: 'autresProduits', section: 'produit', line2033: '2033-D E' },
-  
+
   // Expenses - Services extérieurs
   'Fournitures de bureau': { field: 'servicesExterieurs', section: 'charge', line2033: '2033-D G' },
   'Logiciels & Abonnements': { field: 'servicesExterieurs', section: 'charge', line2033: '2033-D G' },
   'Télécommunications': { field: 'servicesExterieurs', section: 'charge', line2033: '2033-D G' },
+  'Téléphone et internet': { field: 'servicesExterieurs', section: 'charge', line2033: '2033-D G' },
   'Frais bancaires': { field: 'servicesExterieurs', section: 'charge', line2033: '2033-D G' },
   'Frais de déplacement': { field: 'servicesExterieurs', section: 'charge', line2033: '2033-D G' },
-  'Formation': { field: 'servicesExterieurs', section: 'charge', line2033: '2033-D G' },
+  'Formation': { field: 'servicesExterieur', section: 'charge', line2033: '2033-D G' },
   'Publicité & Marketing': { field: 'servicesExterieurs', section: 'charge', line2033: '2033-D G' },
   'Repas professionnels': { field: 'servicesExterieurs', section: 'charge', line2033: '2033-D G' },
-  
+
   // Expenses - Autres charges
   'Loyer & Charges': { field: 'servicesExterieurs', section: 'charge', line2033: '2033-D G' },
   'Assurances': { field: 'servicesExterieurs', section: 'charge', line2033: '2033-D G' },
-  
+
   // Expenses - Honoraires
   'Honoraires (comptable, avocat)': { field: 'servicesExterieurs', section: 'charge', line2033: '2033-D G' },
-  
+
   // Expenses - Achats
   'Materiel informatique': { field: 'achats', section: 'charge', line2033: '2033-D F' },
-  
+  'Matériel et équipement': { field: 'achats', section: 'charge', line2033: '2033-D F' },
+
   // Expenses - Charges sociales et fiscales
   'Cotisations sociales': { field: 'chargesPersonnel', section: 'charge', line2033: '2033-D H' },
   'Rémunération': { field: 'chargesPersonnel', section: 'charge', line2033: '2033-D H' },
   'Impôts et taxes': { field: 'impotsTaxes', section: 'charge', line2033: '2033-D I' },
-  
+
   // Non-deductible - BUG-014 FIX: Dividendes are NOT charges, they're profit distribution
   'Dividendes': { field: 'nonDeductible', section: 'charge' },
   'Dépenses diverses justifiées': { field: 'servicesExterieurs', section: 'charge', line2033: '2033-D G' },
   'Retrait espèces': { field: 'nonDeductible', section: 'charge' },
   'Non catégorisé': { field: 'autresCharges', section: 'charge', line2033: '2033-D G' },
+
+  // EXCLUDED from liasse (financial movements, not income/expense)
+  // Loans received/repaid are balance sheet items (2033-A), not P&L items (2033-B)
+  'Emprunts et prêts reçus': { field: 'excluded', section: 'actif', exclude: true },
+  'Remboursement emprunts': { field: 'excluded', section: 'passif', exclude: true },
+  'Remboursements reçus': { field: 'excluded', section: 'actif', exclude: true },
 }
 
 // GET - List all liasses or get specific year
@@ -226,6 +235,8 @@ export async function POST(request: NextRequest) {
 
     // Category breakdown for transparency
     const categoryBreakdown: Record<string, { count: number; total: number; field: string }> = {}
+    // Excluded transactions (loans, capital movements) — shown separately, not in P&L
+    const excludedMovements: Array<{ category: string; amount: number; description: string; date: Date }> = []
 
     // Process each transaction - convert TTC to HT for liasse fiscale
     // Using regime-aware toHT() — under franchise en base, amount is already HT
@@ -236,7 +247,20 @@ export async function POST(request: NextRequest) {
       const amountTTC = Math.abs(t.amount)
       const tvaRate = t.category?.defaultTvaRate ?? 0
       const amountHT = toHT(amountTTC, tvaRate, vatRegime)
-      
+
+      // Check if this category should be EXCLUDED from the liasse P&L
+      // (loans, capital movements, repayments — these are balance sheet items, not income/expense)
+      const mapping = CATEGORY_TO_LIASSE[catName] || CATEGORY_TO_LIASSE['Non catégorisé']
+      if (mapping.exclude) {
+        excludedMovements.push({
+          category: catName,
+          amount: amountHT,
+          description: t.description,
+          date: t.date,
+        })
+        continue  // Skip this transaction — do NOT count in liasse P&L
+      }
+
       // Track category breakdown (in HT)
       if (!categoryBreakdown[catName]) {
         categoryBreakdown[catName] = { count: 0, total: 0, field: 'unknown' }
@@ -248,8 +272,6 @@ export async function POST(request: NextRequest) {
         liasseData.chiffreAffaires += amountHT
         categoryBreakdown[catName].field = 'chiffreAffaires'
       } else if (t.type === 'expense') {
-        const mapping = CATEGORY_TO_LIASSE[catName] || CATEGORY_TO_LIASSE['Non catégorisé']
-        
         if (mapping && mapping.field !== 'nonDeductible') {
           liasseData[mapping.field] = (liasseData[mapping.field] || 0) + amountHT
           categoryBreakdown[catName].field = mapping.field
@@ -480,6 +502,8 @@ export async function POST(request: NextRequest) {
       liasse,
       summary: {
         transactions: transactions.length,
+        transactionsIncluded: transactions.length - excludedMovements.length,
+        transactionsExcluded: excludedMovements.length,
         chiffreAffaires: liasseData.chiffreAffaires,
         totalCharges,
         resultatCourant,
@@ -493,6 +517,7 @@ export async function POST(request: NextRequest) {
         disponibilites,
       },
       categoryBreakdown,
+      excludedMovements,  // Loans, capital movements — shown separately, not in P&L
     })
   } catch (error) {
     console.error('Error generating liasse:', error)

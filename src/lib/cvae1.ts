@@ -121,9 +121,24 @@ export function calculateValeurAjoutee(input: VAEffectifsInput): VAEffectifsResu
   let chargesExclues = 0
   let nombreTransactions = 0
 
+  // Categories that should be EXCLUDED from the VA calculation
+  // (loans, capital movements — these are balance sheet items, not P&L items)
+  const EXCLUDED_CATEGORIES = [
+    'Emprunts et prêts reçus',
+    'Remboursement emprunts',
+    'Remboursements reçus',
+  ]
+
   for (const t of transactions) {
     const date = new Date(t.date)
     if (date < fyStart || date > fyEnd) continue
+
+    // Skip excluded categories (loans, capital movements)
+    const catName = t.category?.name
+    if (catName && EXCLUDED_CATEGORIES.includes(catName)) {
+      continue  // Do NOT count in CA or charges
+    }
+
     nombreTransactions++
 
     // Convert TTC → HT using regime-aware toHT()

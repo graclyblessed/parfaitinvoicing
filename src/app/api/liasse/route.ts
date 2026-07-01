@@ -47,9 +47,11 @@ const CATEGORY_TO_LIASSE: Record<string, {
   // Non-deductible - BUG-014 FIX: Dividendes are NOT charges, they're profit distribution
   'Dividendes': { field: 'nonDeductible', section: 'charge' },
   'Dépenses diverses justifiées': { field: 'servicesExterieurs', section: 'charge', line2033: '2033-D G' },
-  // Retrait espèces: cash withdrawals for business purchases (cleaning products/equipment at local markets)
-  // Treated as deductible expense (Achats) — user confirmed ALL cash withdrawals are for business, never personal
-  'Retrait espèces': { field: 'achats', section: 'charge', line2033: '2033-D F' },
+  // Retrait espèces: NON-deductible because cash-only market purchases have no receipts.
+  // User confirmed all withdrawals are for business (cleaning products at Clignancourt-type markets),
+  // but without receipts, the DGFiP can reject the deduction + apply 40% penalty (art. 1729 CGI).
+  // Safer to treat as non-deductible to avoid audit risk. Bénéfice is already a déficit (-972€).
+  'Retrait espèces': { field: 'nonDeductible', section: 'charge' },
   'Non catégorisé': { field: 'autresCharges', section: 'charge', line2033: '2033-D G' },
 
   // EXCLUDED from liasse (financial movements, not income/expense)
